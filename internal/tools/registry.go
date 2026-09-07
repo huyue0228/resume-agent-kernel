@@ -2,6 +2,8 @@ package tools
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/google/jsonschema-go/jsonschema"
@@ -40,11 +42,6 @@ type Registry struct {
 	ordered     []Definition
 	frozen      bool
 	schemas     map[string]*jsonschema.Resolved
-}
-
-func New(envelope protocol.CaseEnvelopeV2, external ...Provider) (*Registry, error) {
-	providers := append([]Provider{NewCaseProvider(envelope)}, external...)
-	return NewProviders(providers...)
 }
 
 func NewProviders(providers ...Provider) (*Registry, error) {
@@ -118,6 +115,19 @@ func (registry *Registry) Freeze() {
 
 func (r *Registry) Catalog() []Definition {
 	return append([]Definition(nil), r.ordered...)
+}
+
+// Fingerprint 冻结所有工具（包括内部 Provider）的名称、Schema、版本和可见性。
+func (r *Registry) Fingerprint() (string, error) {
+	if !r.frozen {
+		return "", fmt.Errorf("registry is not frozen")
+	}
+	raw, err := json.Marshal(r.definitions)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(raw)
+	return "sha256:" + hex.EncodeToString(digest[:]), nil
 }
 
 func (r *Registry) Execute(ctx context.Context, call protocol.ToolCall) (json.RawMessage, int, error) {

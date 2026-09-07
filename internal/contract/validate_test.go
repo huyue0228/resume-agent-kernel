@@ -7,7 +7,7 @@ import (
 )
 
 func TestPublishedFixturesAndGoWireRoundTrip(t *testing.T) {
-	for _, name := range []string{"request", "response"} {
+	for _, name := range []string{"request", "response", "capabilities"} {
 		raw, err := Bundle.ReadFile("bundle/" + name + ".example.json")
 		if err != nil {
 			t.Fatal(err)
@@ -18,8 +18,10 @@ func TestPublishedFixturesAndGoWireRoundTrip(t *testing.T) {
 		var value any
 		if name == "request" {
 			value = &p.AnalysisRequestV1{}
-		} else {
+		} else if name == "response" {
 			value = &p.AnalysisResponseV1{}
+		} else {
+			value = &p.KernelCapabilitiesV1{}
 		}
 		if err = json.Unmarshal(raw, value); err != nil {
 			t.Fatal(err)

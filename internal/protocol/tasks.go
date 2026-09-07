@@ -7,12 +7,9 @@ import (
 )
 
 const (
-	TaskProtocolVersion     = "resume-analysis/v1"
-	ResumeJobMatchTaskKind  = "candidate.resume_job_match"
-	TaskResultVersion       = "resume-job-match/v1"
-	MatchToolsetVersion     = "resume-job-match-tools/v1"
-	MatchPolicyVersion      = "django-policy-gate/v2"
-	MatchInstructionVersion = "resume-job-match-kernel/v1"
+	TaskProtocolVersion    = "resume-analysis/v1"
+	ResumeJobMatchTaskKind = "candidate.resume_job_match"
+	TaskResultVersion      = "resume-job-match/v1"
 )
 
 type TaskPinV1 struct {
@@ -104,8 +101,13 @@ func (e TaskEnvelopeV1) Validate() error {
 	if strings.TrimSpace(e.TaskID) == "" || strings.TrimSpace(e.IdempotencyKey) == "" {
 		return errors.New("task_id and idempotency_key are required")
 	}
-	if e.Pin.ProtocolVersion != TaskProtocolVersion || e.Pin.ToolsetVersion != MatchToolsetVersion || e.Pin.ResultSchemaVersion != TaskResultVersion || e.Pin.PolicyVersion != MatchPolicyVersion || e.Pin.InstructionVersion != MatchInstructionVersion || e.Pin.PinID == "" || e.Pin.ModelConfigRevision == "" {
+	if e.Pin.ProtocolVersion != TaskProtocolVersion || e.Pin.ResultSchemaVersion != TaskResultVersion {
 		return errors.New("unsupported task pin")
+	}
+	for _, value := range []string{e.Pin.PinID, e.Pin.KernelBuild, e.Pin.ToolsetVersion, e.Pin.InstructionVersion, e.Pin.PolicyVersion, e.Pin.ModelConfigRevision} {
+		if strings.TrimSpace(value) == "" || len(value) > 128 {
+			return errors.New("invalid task pin")
+		}
 	}
 	b := e.Budget
 	if b.MaxTurns < 1 || b.MaxTurns > 64 || b.MaxToolCalls < 1 || b.MaxToolCalls > 512 || b.MaxDurationSeconds < 1 || b.MaxDurationSeconds > 1800 || b.MaxOCRPages < 1 || b.MaxOCRPages > 100 || b.MaxTokens < 1 || b.MaxTokens > 1000000 {

@@ -2,7 +2,9 @@ package llmloop
 
 import (
 	"context"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"time"
@@ -15,6 +17,11 @@ import (
 
 //go:embed instructions.txt
 var instructions string
+
+func InstructionVersion() string {
+	digest := sha256.Sum256([]byte(instructions))
+	return "sha256:" + hex.EncodeToString(digest[:])
+}
 
 func RunCandidate(ctx context.Context, client model.Client, registry *tools.Registry, c *agent.Collector, b p.TaskBudgetV1, trace *p.SafeTrace) error {
 	catalog, _ := json.Marshal(map[string]any{"available_tools": registry.Catalog(), "budget": b, "existing_profile": c.Profile, "profile_already_submitted": c.Profile != nil})

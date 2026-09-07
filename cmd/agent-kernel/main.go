@@ -42,9 +42,14 @@ func main() {
 		}
 	}()
 
+	service := runtime.NewService(build, externalProviders...)
+	if _, err := service.Capabilities(); err != nil {
+		logger.Error("tool registry failed to freeze", "error_type", "registry_init_failed")
+		os.Exit(2)
+	}
 	httpServer := &http.Server{
 		Addr:              address,
-		Handler:           server.New(runtime.NewService(build, externalProviders...), token, build, logger),
+		Handler:           server.New(service, token, logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      31 * time.Minute,

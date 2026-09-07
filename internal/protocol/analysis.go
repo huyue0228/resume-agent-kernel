@@ -5,6 +5,18 @@ import (
 	"errors"
 )
 
+type KernelCapabilitiesV1 struct {
+	ProtocolVersion     string   `json:"protocol_version"`
+	ResultSchemaVersion string   `json:"result_schema_version"`
+	TaskKinds           []string `json:"task_kinds"`
+	KernelBuild         string   `json:"kernel_build"`
+	ToolsetVersion      string   `json:"toolset_version"`
+	InstructionVersion  string   `json:"instruction_version"`
+	Mock                bool     `json:"mock"`
+}
+
+var ErrVersionUnavailable = errors.New("kernel_version_unavailable")
+
 // AnalysisRequestV1 是唯一公开的候选人级输入；不接受准入规则、历史志愿或 HC。
 type AnalysisRequestV1 struct {
 	ProtocolVersion  string          `json:"protocol_version"`

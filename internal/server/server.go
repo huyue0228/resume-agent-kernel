@@ -5,7 +5,6 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -19,52 +18,52 @@ import (
 const maxRequestBytes = 2 << 20
 
 type Evaluator interface {
-	Evaluate(context.Context, protocol.CaseEnvelopeV2, string) (protocol.AgentActionProposalV1, error)
+	ExecuteAnalysis(context.Context, protocol.AnalysisRequestV1, string) (protocol.AnalysisResponseV1, error)
+	Capabilities() (protocol.KernelCapabilitiesV1, error)
 }
 
 type Handler struct {
 	evaluator Evaluator
 	token     string
-	build     string
 	logger    *slog.Logger
 	mux       *http.ServeMux
 }
 
-func New(evaluator Evaluator, token, build string, logger *slog.Logger) http.Handler {
+func New(evaluator Evaluator, token string, logger *slog.Logger) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	handler := &Handler{evaluator: evaluator, token: token, build: build, logger: logger, mux: http.NewServeMux()}
+	handler := &Handler{evaluator: evaluator, token: token, logger: logger, mux: http.NewServeMux()}
 	handler.mux.HandleFunc("GET /healthz", handler.health)
-	handler.mux.HandleFunc("POST /v1/evaluate", handler.evaluate)
+	handler.mux.HandleFunc("GET /v2/capabilities", handler.capabilities)
 	handler.mux.HandleFunc("POST /v2/tasks/execute", handler.executeTask)
 	return handler.withRecovery(handler.mux)
 }
 
 func (h *Handler) health(writer http.ResponseWriter, _ *http.Request) {
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"ok":                    true,
-		"task_protocol_version": protocol.TaskProtocolVersion,
-		"task_toolset_version":  protocol.MatchToolsetVersion,
-		"task_result_version":   protocol.TaskResultVersion,
-		"build":                 h.build,
-		"protocol_version":      protocol.ProtocolVersion,
-		"toolset_version":       protocol.ToolsetVersion,
-		"result_schema_version": protocol.ResultVersion,
-		"instruction_version":   protocol.InstructionVersion,
-	})
+	writeJSON(writer, http.StatusOK, map[string]any{"ok": true})
+}
+func (h *Handler) capabilities(w http.ResponseWriter, r *http.Request) {
+	if h.token == "" || !constantTimeEqual(r.Header.Get("X-Agent-Kernel-Token"), h.token) {
+		writeError(w, 401, "kernel_unauthorized", "Agent Kernel authentication failed")
+		return
+	}
+	value, err := h.evaluator.Capabilities()
+	if err != nil {
+		writeError(w, 503, "kernel_unavailable", "Kernel capabilities unavailable")
+		return
+	}
+	raw, err := json.Marshal(value)
+	if err != nil || contract.Validate("capabilities", raw) != nil {
+		writeError(w, 503, "kernel_unavailable", "Kernel capabilities invalid")
+		return
+	}
+	writeJSON(w, 200, value)
 }
 
 func (h *Handler) executeTask(w http.ResponseWriter, r *http.Request) {
 	if h.token == "" || !constantTimeEqual(r.Header.Get("X-Agent-Kernel-Token"), h.token) {
 		writeError(w, 401, "kernel_unauthorized", "Agent Kernel authentication failed")
-		return
-	}
-	executor, ok := h.evaluator.(interface {
-		ExecuteAnalysis(context.Context, protocol.AnalysisRequestV1, string) (protocol.AnalysisResponseV1, error)
-	})
-	if !ok {
-		writeError(w, 503, "kernel_unavailable", "Task runtime unavailable")
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBytes)
@@ -84,9 +83,11 @@ func (h *Handler) executeTask(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "invalid_envelope", "Invalid analysis request")
 		return
 	}
-	result, err := executor.ExecuteAnalysis(r.Context(), e, r.Header.Get("X-Model-API-Key"))
+	started := time.Now()
+	result, err := h.evaluator.ExecuteAnalysis(r.Context(), e, r.Header.Get("X-Model-API-Key"))
 	if err != nil {
 		code, status := safeError(err)
+		h.logger.Warn("analysis rejected", "task_id", e.TaskID, "code", code, "duration_ms", time.Since(started).Milliseconds())
 		if strings.Contains(err.Error(), "idempotency") {
 			code = "idempotency_conflict"
 			status = 409
@@ -94,45 +95,8 @@ func (h *Handler) executeTask(w http.ResponseWriter, r *http.Request) {
 		writeError(w, status, code, publicMessage(code))
 		return
 	}
+	h.logger.Info("analysis completed", "task_id", e.TaskID, "trace_id", result.Trace.TraceID, "status", result.Manifest.TerminalState, "duration_ms", time.Since(started).Milliseconds())
 	writeJSON(w, 200, result)
-}
-
-func (h *Handler) evaluate(writer http.ResponseWriter, request *http.Request) {
-	if h.token == "" || !constantTimeEqual(request.Header.Get("X-Agent-Kernel-Token"), h.token) {
-		writeError(writer, http.StatusUnauthorized, "kernel_unauthorized", "Agent Kernel authentication failed")
-		return
-	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maxRequestBytes)
-	decoder := json.NewDecoder(request.Body)
-	decoder.DisallowUnknownFields()
-	var envelope protocol.CaseEnvelopeV2
-	if err := decoder.Decode(&envelope); err != nil {
-		writeError(writer, http.StatusBadRequest, "invalid_envelope", "invalid CaseEnvelopeV2")
-		return
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		writeError(writer, http.StatusBadRequest, "invalid_envelope", "invalid CaseEnvelopeV2")
-		return
-	}
-	if err := envelope.Validate(); err != nil {
-		writeError(writer, http.StatusUnprocessableEntity, "invalid_envelope", err.Error())
-		return
-	}
-	started := time.Now()
-	proposal, err := h.evaluator.Evaluate(request.Context(), envelope, request.Header.Get("X-Model-API-Key"))
-	if err != nil {
-		code, status := safeError(err)
-		h.logger.Warn("agent evaluation failed", "task_id", envelope.TaskID, "code", code, "duration_ms", time.Since(started).Milliseconds(), "error_type", errorType(err))
-		payload := map[string]any{"ok": false, "code": code, "detail": publicMessage(code)}
-		var evaluationError *protocol.EvaluationError
-		if errors.As(err, &evaluationError) {
-			payload["safe_trace"] = evaluationError.Trace
-		}
-		writeJSONStatus(writer, status, payload)
-		return
-	}
-	h.logger.Info("agent evaluation completed", "task_id", envelope.TaskID, "trace_id", proposal.Trace.TraceID, "turns", proposal.Trace.Turns, "tool_calls", proposal.Trace.ToolCallCount, "duration_ms", time.Since(started).Milliseconds())
-	writeJSON(writer, http.StatusOK, proposal)
 }
 
 func (h *Handler) withRecovery(next http.Handler) http.Handler {
@@ -157,6 +121,8 @@ func constantTimeEqual(left, right string) bool {
 func safeError(err error) (string, int) {
 	message := strings.ToLower(err.Error())
 	switch {
+	case errors.Is(err, protocol.ErrVersionUnavailable):
+		return "kernel_version_unavailable", http.StatusConflict
 	case errors.Is(err, context.DeadlineExceeded) || strings.Contains(message, "timeout"):
 		return "llm_timeout", http.StatusGatewayTimeout
 	case errors.Is(err, context.Canceled):
@@ -174,6 +140,8 @@ func safeError(err error) (string, int) {
 
 func publicMessage(code string) string {
 	switch code {
+	case "kernel_version_unavailable":
+		return "冻结的 Kernel 版本已不可用，请重新提交任务"
 	case "llm_timeout":
 		return "模型请求超时"
 	case "agent_cancelled":
@@ -187,13 +155,6 @@ func publicMessage(code string) string {
 	default:
 		return "Agent 未返回符合协议的结果"
 	}
-}
-
-func errorType(err error) string {
-	if err == nil {
-		return ""
-	}
-	return fmt.Sprintf("%T", err)
 }
 
 func writeError(writer http.ResponseWriter, status int, code, message string) {

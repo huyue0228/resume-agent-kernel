@@ -44,8 +44,12 @@ func (s *Service) Execute(ctx context.Context, e p.TaskEnvelopeV1, key string) (
 	if err := e.Validate(); err != nil {
 		return p.TaskResultV1{}, err
 	}
-	if e.Pin.KernelBuild != s.Build {
-		return p.TaskResultV1{}, errors.New("kernel build mismatch")
+	capabilities, err := s.Capabilities()
+	if err != nil {
+		return p.TaskResultV1{}, err
+	}
+	if e.Pin.KernelBuild != capabilities.KernelBuild || e.Pin.ToolsetVersion != capabilities.ToolsetVersion || e.Pin.InstructionVersion != capabilities.InstructionVersion {
+		return p.TaskResultV1{}, p.ErrVersionUnavailable
 	}
 	raw, _ := json.Marshal(e)
 	sum := sha256.Sum256(raw)
@@ -151,7 +155,7 @@ func (s *Service) runTask(ctx context.Context, e p.TaskEnvelopeV1, key, hash str
 			return result, registryErr
 		}
 		for _, tool := range registry.Catalog() {
-			result.Manifest.ToolVersions[tool.Name] = p.MatchToolsetVersion
+			result.Manifest.ToolVersions[tool.Name] = e.Pin.ToolsetVersion
 			if tool.Version != "" {
 				result.Manifest.ToolVersions[tool.Name] = tool.Version
 			}

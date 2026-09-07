@@ -138,7 +138,7 @@ func connectMCPProvider(ctx context.Context, config MCPServerConfig, logger *slo
 		return nil, err
 	}
 	client := mcp.NewClient(
-		&mcp.Implementation{Name: "smart-resume-agent-kernel", Version: protocol.ProtocolVersion},
+		&mcp.Implementation{Name: "resume-agent-kernel", Version: protocol.TaskProtocolVersion},
 		&mcp.ClientOptions{Logger: logger, Capabilities: &mcp.ClientCapabilities{}},
 	)
 	connectCtx, cancel := context.WithTimeout(ctx, timeout)

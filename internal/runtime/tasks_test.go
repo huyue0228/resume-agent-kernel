@@ -23,7 +23,8 @@ func (d *testDocument) Read(context.Context, p.ArtifactRefV1, int) (pipeline.Doc
 	return pipeline.Document{Text: strings.Repeat("负责后端服务开发与测试工作。", 20), Checksum: strings.Repeat("a", 64)}, nil
 }
 func taskEnvelope() p.TaskEnvelopeV1 {
-	return p.TaskEnvelopeV1{ProtocolVersion: p.TaskProtocolVersion, TaskKind: p.ResumeJobMatchTaskKind, TaskID: "task", IdempotencyKey: "key", Pin: p.TaskPinV1{PinID: "pin", KernelBuild: "test", ProtocolVersion: p.TaskProtocolVersion, ToolsetVersion: p.MatchToolsetVersion, ResultSchemaVersion: p.TaskResultVersion, PolicyVersion: p.MatchPolicyVersion, InstructionVersion: p.MatchInstructionVersion, ModelConfigRevision: "model"}, Snapshot: p.CaseSnapshotV1{Candidate: p.CandidateSnapshotV1{Ref: "candidate"}, Volunteers: []p.VolunteerSnapshotV1{{Ref: "v", Entity: "GW", PositionName: "开发"}}, Jobs: []p.JobSnapshotV1{{Ref: "j", ContentHash: strings.Repeat("a", 64), Entity: "GW", PublicName: "开发", PositionName: "内部开发", DepartmentRef: "d"}}}, Budget: p.TaskBudgetV1{MaxTurns: 5, MaxToolCalls: 20, MaxTokens: 100000, MaxOCRPages: 10, MaxDurationSeconds: 30}}
+	capabilities, _ := NewService("test").Capabilities()
+	return p.TaskEnvelopeV1{ProtocolVersion: p.TaskProtocolVersion, TaskKind: p.ResumeJobMatchTaskKind, TaskID: "task", IdempotencyKey: "key", Pin: p.TaskPinV1{PinID: "pin", KernelBuild: "test", ProtocolVersion: p.TaskProtocolVersion, ToolsetVersion: capabilities.ToolsetVersion, ResultSchemaVersion: p.TaskResultVersion, PolicyVersion: "platform-policy/v99", InstructionVersion: capabilities.InstructionVersion, ModelConfigRevision: "model"}, Snapshot: p.CaseSnapshotV1{Candidate: p.CandidateSnapshotV1{Ref: "candidate"}, Volunteers: []p.VolunteerSnapshotV1{{Ref: "v", Entity: "GW", PositionName: "开发"}}, Jobs: []p.JobSnapshotV1{{Ref: "j", ContentHash: strings.Repeat("a", 64), Entity: "GW", PublicName: "开发", PositionName: "内部开发", DepartmentRef: "d"}}}, Budget: p.TaskBudgetV1{MaxTurns: 5, MaxToolCalls: 20, MaxTokens: 100000, MaxOCRPages: 10, MaxDurationSeconds: 30}}
 }
 func TestEmptyAnalysisScopeNeverReadsDocumentOrModel(t *testing.T) {
 	e := taskEnvelope()
@@ -71,10 +72,10 @@ func TestTaskHTTPModelUsesCollectorsAndReturnsNoBusinessAction(t *testing.T) {
 	var request p.AnalysisRequestV1
 	json.Unmarshal(requestData, &request)
 	request.Model = e.Model
-	request.Pin.KernelBuild = "test"
+	request.Pin = e.Pin
 	request.Scope.Jobs = []p.AnalysisJobV1{{Ref: "j", ContentHash: strings.Repeat("a", 64), RequiredMajors: []string{}}}
 	wireRequest, _ := json.Marshal(request)
-	kernelHTTP := httptest.NewServer(httpserver.New(s, "kernel-token", "test", nil))
+	kernelHTTP := httptest.NewServer(httpserver.New(s, "kernel-token", nil))
 	defer kernelHTTP.Close()
 	httpRequest, _ := http.NewRequest(http.MethodPost, kernelHTTP.URL+"/v2/tasks/execute", bytes.NewReader(wireRequest))
 	httpRequest.Header.Set("X-Agent-Kernel-Token", "kernel-token")

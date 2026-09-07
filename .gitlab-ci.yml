@@ -1,0 +1,8 @@
+stages: [check]
+variables:
+  GO_CI_IMAGE: "golang:1.25"
+kernel:
+  stage: check
+  image: $GO_CI_IMAGE
+  script:
+    - make check build
