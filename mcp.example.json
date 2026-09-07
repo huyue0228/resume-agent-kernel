@@ -1,0 +1,21 @@
+{
+  "servers": [
+    {
+      "name": "resume-reference",
+      "purpose": "taxonomy",
+      "visibility": "agent",
+      "transport": "stdio",
+      "command": "/usr/local/bin/resume-reference-mcp",
+      "args": [],
+      "environment_from_env": {
+        "REFERENCE_API_TOKEN": "REFERENCE_API_TOKEN"
+      },
+      "allow_tools": [
+        "reference.lookup"
+      ],
+      "read_only": true,
+      "timeout_seconds": 10,
+      "max_output_bytes": 65536
+    }
+  ]
+}

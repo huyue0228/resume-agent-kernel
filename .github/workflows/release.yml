@@ -1,0 +1,97 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    uses: ./.github/workflows/check.yml
+  release:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Validate release ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            [[ "$GITHUB_ACTOR" == "$GITHUB_REPOSITORY_OWNER" ]]
+            [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+            if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+              echo "Version already released; use a new tag"; exit 1
+            fi
+            echo "VERSION=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
+          else
+            echo "VERSION=dev-${GITHUB_SHA:0:12}" >> "$GITHUB_ENV"
+          fi
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      - name: Build standalone binary
+        run: |
+          GOOS=linux GOARCH=amd64 make build KERNEL_VERSION="$VERSION"
+          mv dist/agent-kernel dist/agent-kernel-linux-amd64
+          cp internal/contract/bundle/manifest.json dist/contract-manifest.json
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        id: image
+        with:
+          context: .
+          platforms: linux/amd64
+          build-args: KERNEL_VERSION=${{ env.VERSION }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          tags: ${{ env.IMAGE }}:${{ env.VERSION }}
+          push: ${{ startsWith(github.ref, 'refs/tags/') }}
+          load: ${{ !startsWith(github.ref, 'refs/tags/') }}
+      - name: Record digest and checksums
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path("dist/image.json").write_text(json.dumps({
+              "version": os.environ["VERSION"],
+              "image": os.environ["IMAGE"] + ":" + os.environ["VERSION"],
+              "digest": os.environ["IMAGE_DIGEST"],
+              "published": os.environ["GITHUB_REF"].startswith("refs/tags/"),
+              "platform": "linux/amd64",
+              "commit": os.environ["GITHUB_SHA"],
+          }, indent=2) + "\n")
+          PY
+          cd dist
+          sha256sum agent-kernel-linux-amd64 contract-manifest.json image.json > SHA256SUMS
+          sha256sum -c SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kernel-${{ env.VERSION }}
+          path: dist/
+          retention-days: 7
+      - name: Publish versioned release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          args=()
+          if [[ "$VERSION" == *-* ]]; then args+=(--prerelease); fi
+          gh release create "$VERSION" dist/* --verify-tag --generate-notes "${args[@]}"

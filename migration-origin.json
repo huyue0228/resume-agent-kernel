@@ -1,0 +1,8 @@
+{
+  "source_repository": "smart-resume",
+  "source_path": "agent-kernel/",
+  "source_head": "74b8e62c5ec251a060887e4263b5ead525b0bd76",
+  "includes_uncommitted_work": true,
+  "history_imported": false,
+  "note": "独立仓从工作区拆出；原仓历史保留，不包含业务数据库或媒体文件。"
+}

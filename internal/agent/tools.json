@@ -1,0 +1,423 @@
+[
+  {
+    "name": "case.read_constraints",
+    "description": "读取当前志愿、学校准入结果和合规分析范围",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "read_only": true
+  },
+  {
+    "name": "candidate.read_context",
+    "description": "读取学历与专业基础信息",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "read_only": true
+  },
+  {
+    "name": "resume.list_sections",
+    "description": "列出简历页码和行区间",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "read_only": true
+  },
+  {
+    "name": "resume.read_sections",
+    "description": "按行读取简历原文，最多 200 行",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "start_line": {
+          "type": "integer"
+        },
+        "end_line": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start_line",
+        "end_line"
+      ],
+      "additionalProperties": false
+    },
+    "read_only": true
+  },
+  {
+    "name": "resume.search_evidence",
+    "description": "搜索简历原文",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "read_only": true
+  },
+  {
+    "name": "jobs.list_candidates",
+    "description": "列出全部合规岗位及稳定引用",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "read_only": true
+  },
+  {
+    "name": "job.read_requirement",
+    "description": "读取合规岗位职责与要求",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "job_ref": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "job_ref"
+      ],
+      "additionalProperties": false
+    },
+    "read_only": true
+  },
+  {
+    "name": "job.search_requirements",
+    "description": "搜索合规岗位职责与专业要求",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "read_only": true
+  },
+  {
+    "name": "taxonomy.lookup_major",
+    "description": "查询本地专业分类信息",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "read_only": true
+  },
+  {
+    "name": "evidence.verify_quotes",
+    "description": "验证原文、页码与行定位",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "quote": {
+                "type": "string"
+              },
+              "page": {
+                "type": "integer"
+              },
+              "start_line": {
+                "type": "integer"
+              },
+              "end_line": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "quote",
+              "page",
+              "start_line",
+              "end_line"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "read_only": true
+  },
+  {
+    "name": "candidate_profile.submit",
+    "description": "提交画像；每项结论必须提供原文证据，仅写入会话内存",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "claims": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "education",
+                  "project",
+                  "internship",
+                  "skill",
+                  "certificate",
+                  "major_direction",
+                  "agent_experience",
+                  "risk"
+                ]
+              },
+              "summary": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "quote": {
+                      "type": "string"
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "start_line": {
+                      "type": "integer"
+                    },
+                    "end_line": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "quote",
+                    "page",
+                    "start_line",
+                    "end_line"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "details": {
+                "type": "object",
+                "properties": {
+                  "school_name": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "degree": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "major": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "period": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "role": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                },
+                "additionalProperties": false
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "kind",
+              "summary",
+              "evidence"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "risks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "claims",
+        "risks"
+      ],
+      "additionalProperties": false
+    },
+    "read_only": true
+  },
+  {
+    "name": "job_match.submit",
+    "description": "提交合规岗位维度分析，不提交综合分和排名；不得重复提交",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "matches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "job_ref": {
+                "type": "string"
+              },
+              "dimensions": {
+                "type": "object",
+                "properties": {
+                  "major_match": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "skills_match": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "experience_evidence": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "job_requirement": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "resume_quality": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "major_match",
+                  "skills_match",
+                  "experience_evidence",
+                  "job_requirement",
+                  "resume_quality"
+                ],
+                "additionalProperties": false
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "quote": {
+                      "type": "string"
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "start_line": {
+                      "type": "integer"
+                    },
+                    "end_line": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "quote",
+                    "page",
+                    "start_line",
+                    "end_line"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "risks": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "job_ref",
+              "dimensions",
+              "confidence",
+              "evidence",
+              "risks",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "matches"
+      ],
+      "additionalProperties": false
+    },
+    "read_only": true
+  },
+  {
+    "name": "task_done",
+    "description": "画像和所有岗位提交完成后调用 DONE；无法完成调用 FAILED",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "DONE",
+            "FAILED"
+          ]
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "read_only": true
+  }
+]
