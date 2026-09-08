@@ -74,6 +74,14 @@ func (s *Service) runTask(ctx context.Context, e p.TaskEnvelopeV1, key, hash str
 				result.Manifest.FailureCode = "task_cancelled"
 			} else if strings.Contains(err.Error(), "budget") {
 				result.Manifest.FailureCode = "budget_exhausted"
+			} else if errors.Is(err, model.ErrRateLimited) {
+				result.Manifest.FailureCode = "model_rate_limited"
+			} else if errors.Is(err, model.ErrConnection) {
+				result.Manifest.FailureCode = "model_connection_error"
+			} else if errors.Is(err, model.ErrInvalidResponse) || errors.Is(err, llmloop.ErrInvalidOutput) {
+				result.Manifest.FailureCode = "model_output_invalid"
+			} else if errors.Is(err, llmloop.ErrIncomplete) {
+				result.Manifest.FailureCode = "materials_incomplete"
 			}
 			result.Manifest.Warnings = append(result.Manifest.Warnings, "分析未完成，请人工处理或重试")
 			err = nil

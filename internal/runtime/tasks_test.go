@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"resume-agent-kernel/internal/contract"
 	"resume-agent-kernel/internal/pipeline"
@@ -21,6 +22,51 @@ type testDocument struct{ calls int }
 func (d *testDocument) Read(context.Context, p.ArtifactRefV1, int) (pipeline.Document, error) {
 	d.calls++
 	return pipeline.Document{Text: strings.Repeat("负责后端服务开发与测试工作。", 20), Checksum: strings.Repeat("a", 64)}, nil
+}
+
+func TestTaskFailuresKeepSafeSpecificCodes(t *testing.T) {
+	for _, tc := range []struct {
+		name, content, code string
+		status              int
+		delay               time.Duration
+	}{
+		{name: "invalid_json", content: "not json", code: "model_output_invalid"},
+		{name: "missing_done", content: `{"kind":"final"}`, code: "model_output_invalid"},
+		{name: "turn_budget", content: `{"kind":"tool_calls","tool_calls":[{"id":"","name":"resume.list_sections","arguments":{}}]}`, code: "budget_exhausted"},
+		{name: "incomplete", content: `{"kind":"tool_calls","tool_calls":[{"name":"task_done","arguments":{"status":"FAILED"}}]}`, code: "materials_incomplete"},
+		{name: "connection", status: 401, code: "model_connection_error"},
+		{name: "rate_limit", status: 429, code: "model_rate_limited"},
+		{name: "timeout", delay: 50 * time.Millisecond, code: "task_timeout"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				time.Sleep(tc.delay)
+				if tc.status != 0 {
+					w.WriteHeader(tc.status)
+					w.Write([]byte("private response body"))
+					return
+				}
+				json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]string{"content": tc.content}}}})
+			}))
+			defer server.Close()
+			e := taskEnvelope()
+			e.Budget.MaxTurns = 1
+			e.Model = p.ModelConfig{APIStyle: "chat_json", BaseURL: server.URL, ModelName: "fake", TimeoutSeconds: 1}
+			if tc.delay > 0 {
+				e.Model.TimeoutSeconds = .01
+			}
+			s := NewService("test")
+			s.Documents = &testDocument{}
+			result, err := s.Execute(context.Background(), e, "unit-test-only")
+			if err != nil || result.Manifest.TerminalState != "FAILED" || result.Manifest.FailureCode != tc.code {
+				t.Fatalf("failure classification: %s, %v", result.Manifest.FailureCode, err)
+			}
+			raw, _ := json.Marshal(result)
+			if strings.Contains(string(raw), "unit-test-only") || strings.Contains(string(raw), "private response body") {
+				t.Fatal("failure leaked sensitive data")
+			}
+		})
+	}
 }
 func taskEnvelope() p.TaskEnvelopeV1 {
 	capabilities, _ := NewService("test").Capabilities()

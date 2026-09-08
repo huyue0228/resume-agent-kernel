@@ -30,6 +30,12 @@ type Client interface {
 	Complete(context.Context, []Message) (string, Usage, error)
 }
 
+var (
+	ErrConnection      = errors.New("model connection failed")
+	ErrRateLimited     = errors.New("model rate limited")
+	ErrInvalidResponse = errors.New("invalid model response")
+)
+
 type HTTPClient struct {
 	OutputBudget int
 	config       protocol.ModelConfig
@@ -108,16 +114,32 @@ func (c *HTTPClient) completeOnce(ctx context.Context, messages []Message) (stri
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return "", Usage{}, true, errors.New("model connection failed")
+		if ctx.Err() != nil {
+			return "", Usage{}, false, ctx.Err()
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return "", Usage{}, true, context.DeadlineExceeded
+		}
+		return "", Usage{}, true, ErrConnection
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
-		return "", Usage{}, true, errors.New("model response read failed")
+		if ctx.Err() != nil {
+			return "", Usage{}, false, ctx.Err()
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return "", Usage{}, true, context.DeadlineExceeded
+		}
+		return "", Usage{}, true, ErrConnection
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		retryable := resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
-		return "", Usage{}, retryable, fmt.Errorf("model request failed with status %d", resp.StatusCode)
+		cause := ErrConnection
+		if resp.StatusCode == http.StatusTooManyRequests {
+			cause = ErrRateLimited
+		}
+		return "", Usage{}, retryable, fmt.Errorf("%w: status %d", cause, resp.StatusCode)
 	}
 	if c.config.APIStyle == "responses" {
 		content, usage, err := parseResponses(data)
@@ -140,7 +162,7 @@ func parseChat(data []byte) (string, Usage, error) {
 		} `json:"usage"`
 	}
 	if err := json.Unmarshal(data, &response); err != nil || len(response.Choices) == 0 || strings.TrimSpace(response.Choices[0].Message.Content) == "" {
-		return "", Usage{}, errors.New("model returned an invalid chat response")
+		return "", Usage{}, ErrInvalidResponse
 	}
 	return response.Choices[0].Message.Content, Usage{InputTokens: response.Usage.PromptTokens, OutputTokens: response.Usage.CompletionTokens}, nil
 }
@@ -160,7 +182,7 @@ func parseResponses(data []byte) (string, Usage, error) {
 		} `json:"usage"`
 	}
 	if err := json.Unmarshal(data, &response); err != nil {
-		return "", Usage{}, errors.New("model returned an invalid responses payload")
+		return "", Usage{}, ErrInvalidResponse
 	}
 	content := response.OutputText
 	if strings.TrimSpace(content) == "" {
@@ -173,7 +195,7 @@ func parseResponses(data []byte) (string, Usage, error) {
 		}
 	}
 	if strings.TrimSpace(content) == "" {
-		return "", Usage{}, errors.New("model returned no output text")
+		return "", Usage{}, ErrInvalidResponse
 	}
 	return content, Usage{InputTokens: response.Usage.InputTokens, OutputTokens: response.Usage.OutputTokens}, nil
 }

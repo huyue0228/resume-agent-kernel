@@ -11,7 +11,7 @@ COPY internal ./internal
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X main.build=${KERNEL_VERSION}" -o /out/agent-kernel ./cmd/agent-kernel
 
 FROM ${RUNTIME_IMAGE}
-RUN apk add --no-cache poppler-utils tesseract-ocr tesseract-ocr-data-chi_sim tesseract-ocr-data-eng && addgroup -S agent && adduser -S -G agent agent
+RUN apk add --no-cache ca-certificates poppler-utils tesseract-ocr tesseract-ocr-data-chi_sim tesseract-ocr-data-eng && addgroup -S agent && adduser -S -G agent agent
 COPY --from=builder /out/agent-kernel /usr/local/bin/agent-kernel
 USER agent
 EXPOSE 8090

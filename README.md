@@ -11,7 +11,7 @@ make check build
 make image KERNEL_VERSION=dev
 ```
 
-镜像包含 Poppler 和 Tesseract。原生二进制处理 PDF 时也需要这些程序在 PATH 中。
+镜像包含系统 CA 证书、Poppler 和 Tesseract。原生二进制处理 PDF 时也需要这些程序在 PATH 中。
 
 ## 运行和协议
 
@@ -29,6 +29,12 @@ AGENT_KERNEL_ADDRESS='127.0.0.1:8090' dist/agent-kernel
 模型、指令和工具定义由本仓版本化；MCP 仅允许显式白名单及只读用途。内核没有业务数据库写入或消息发送权限。旧 `/v1/evaluate`、CaseEnvelope 与业务动作输出已经删除，不提供历史协议兼容。
 
 发布镜像的 build 由 `KERNEL_VERSION` 决定，平台单独固定镜像及版本。不要覆盖已发布版本；协议变更先排空旧任务再升级。离线交付默认 `linux/amd64`，可通过 `PLATFORM` 显式指定其他目标。
+
+## 企业模型路由器的 CA
+
+Kernel 默认校验模型 HTTPS 连接，使用容器内的系统信任库。宿主机或调用方已安装企业 CA，不会自动使 Kernel 信任它。私有 CA 需要将现场 CA PEM 文件只读挂载到容器（例如 `/etc/agent-kernel/model-ca.pem`），并设置 `SSL_CERT_FILE=/etc/agent-kernel/model-ca.pem`。文件应包含所需根 CA 和中间 CA 证书，不含私钥，且容器内非 root 的 `agent` 用户必须可读。更新文件后重建容器，让 Go 进程重新加载信任库。
+
+`/healthz` 和 `/v2/capabilities` 均不请求模型，不能代替 TLS 验收。调用方的模型 TEST 也可能使用不同证书配置或跳过校验；必须通过一次真实任务执行，确认模型路由器的证书链、域名和结果均正常。
 
 
 ## 独立版本与发布
