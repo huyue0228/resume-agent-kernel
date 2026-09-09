@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"os"
 	"strings"
 	"time"
 
@@ -19,23 +18,23 @@ import (
 	"resume-agent-kernel/internal/tools"
 )
 
-func (s *Service) ExecuteAnalysis(ctx context.Context, a p.AnalysisRequestV1, key string) (p.AnalysisResponseV1, error) {
+func (s *Service) ExecuteAnalysis(ctx context.Context, a p.AnalysisRequestV2, key string) (p.AnalysisResponseV2, error) {
 	e, err := a.TaskInput()
 	if err != nil {
-		return p.AnalysisResponseV1{}, err
+		return p.AnalysisResponseV2{}, err
 	}
 	r, err := s.Execute(ctx, e, key)
 	if err != nil {
-		return p.AnalysisResponseV1{}, err
+		return p.AnalysisResponseV2{}, err
 	}
-	result := p.AnalysisResponseV1{ProtocolVersion: r.ProtocolVersion, TaskID: r.TaskID, IdempotencyKey: r.IdempotencyKey,
+	result := p.AnalysisResponseV2{ProtocolVersion: r.ProtocolVersion, TaskID: r.TaskID, IdempotencyKey: r.IdempotencyKey,
 		Pin: r.Pin, WorkflowRevision: r.WorkflowRevision, Profile: r.Profile, Matches: r.Matches, Manifest: r.Manifest, Trace: r.Trace}
 	raw, err := json.Marshal(result)
 	if err != nil {
 		return result, err
 	}
 	if err = contract.Validate("response", raw); err != nil {
-		return p.AnalysisResponseV1{}, errors.New("analysis response contract invalid")
+		return p.AnalysisResponseV2{}, errors.New("analysis response contract invalid")
 	}
 	return result, nil
 }
@@ -101,47 +100,18 @@ func (s *Service) runTask(ctx context.Context, e p.TaskEnvelopeV1, key, hash str
 		result.Deterministic.JobRefs = append(result.Deterministic.JobRefs, j.Ref)
 	}
 	result.Trace.ToolCalls = append(result.Trace.ToolCalls, p.ToolTrace{Name: "pipeline.prepare", Status: result.Deterministic.Status, DurationMS: time.Since(started).Milliseconds()})
-	documents := s.Documents
-	if documents == nil {
-		local := pipeline.LocalDocuments{Root: os.Getenv("AGENT_KERNEL_DOCUMENT_ROOT"), SigningKey: os.Getenv("AGENT_KERNEL_DOCUMENT_SIGNING_KEY")}
-		if toolName := os.Getenv("AGENT_KERNEL_OCR_TOOL"); toolName != "" {
-			local.OCR = func(ctx context.Context, a p.ArtifactRefV1, maxPages int) (pipeline.Document, error) {
-				registry, err := tools.NewProviders(s.externalProviders...)
-				if err != nil {
-					return pipeline.Document{}, err
-				}
-				raw, err := registry.ExecuteInternal(ctx, p.ToolCall{Name: toolName, Arguments: map[string]any{"artifact": a, "max_pages": maxPages}})
-				if err != nil {
-					return pipeline.Document{}, err
-				}
-				var response struct {
-					Content struct {
-						Text     string `json:"text"`
-						Checksum string `json:"checksum"`
-						Pages    int    `json:"ocr_pages"`
-					} `json:"structured_content"`
-				}
-				if json.Unmarshal(raw, &response) != nil || response.Content.Checksum != a.Checksum || response.Content.Pages < 1 || response.Content.Pages > maxPages || len(response.Content.Text) == 0 || len(response.Content.Text) > 1<<20 {
-					return pipeline.Document{}, errors.New("invalid OCR provider result")
-				}
-				return pipeline.Document{Text: response.Content.Text, Checksum: response.Content.Checksum, OCRPages: response.Content.Pages}, nil
-			}
-		}
-		documents = local
-	}
 	started = time.Now()
-	document, err := documents.Read(ctx, volunteer.Artifact, e.Budget.MaxOCRPages)
+	document, err := pipeline.ReadText(ctx, volunteer.ResumeText)
 	status := "ok"
 	if err != nil {
 		status = "error"
 	}
-	result.Trace.ToolCalls = append(result.Trace.ToolCalls, p.ToolTrace{Name: "pipeline.document", Status: status, DurationMS: time.Since(started).Milliseconds()})
+	result.Trace.ToolCalls = append(result.Trace.ToolCalls, p.ToolTrace{Name: "pipeline.text_validate", Status: status, DurationMS: time.Since(started).Milliseconds()})
 	if err != nil {
-		result.Manifest.FailureCode = "document_invalid"
+		result.Manifest.FailureCode = "text_invalid"
 		return result, err
 	}
 	result.Manifest.ResumeChecksum = document.Checksum
-	result.Manifest.OCRPages = document.OCRPages
 	collector := agent.NewCollector(document.Text, jobs)
 	client, err := model.NewHTTPClient(e.Model, key)
 	if err != nil {
@@ -177,7 +147,7 @@ func (s *Service) runTask(ctx context.Context, e p.TaskEnvelopeV1, key, hash str
 		}
 	}
 	result.Profile = collector.Profile
-	result.Profile.SourceText = document.Text // 文档 Provider 原文，不由模型提交；不进入 SafeTrace。
+	result.Profile.SourceText = document.Text // 协议校验后的平台全文，不由模型提交；不进入 SafeTrace。
 	result.Matches = collector.Ranked()
 	for _, m := range result.Matches {
 		result.Manifest.CoveredJobs = append(result.Manifest.CoveredJobs, m.JobRef)

@@ -1,18 +1,18 @@
 {
   "files": {
-    "capabilities.example.json": "99b820739ae01f2e123c503f43e033a188939ddc70a0fc0ae8429aab8b1e0585",
-    "capabilities.schema.json": "82fdd06507266f1328fa1cb8d3e227acf7255ab51dc4ff710a7db8c7b86bdf1a",
-    "request.example.json": "673b20f5ebe9a6394b9212e5a62acac06d9f68edf5b9db2e8800b00184205988",
-    "request.schema.json": "eb5206605018fadcd89e94a795375e5054dbd0d10696aec355b7254eab6801ed",
-    "response.example.json": "41598e18249847dfd1925ce5c2c073663b87b9e6b2196eb73faf9cbd5e82b4b3",
-    "response.schema.json": "4a2f77684f2f99e270322bb4061703ffbfd1b775e5a65ec504600c1daba1559a"
+    "capabilities.example.json": "9516cd49158e458d8f1cef649ad9350022f74fd35e032b507d375f7fe1e44352",
+    "capabilities.schema.json": "30994d3416246a08b998ba5c555eb4b291f9cbe7439c4e99e8a5be0ba81f9597",
+    "request.example.json": "91ad9f6fd9f9054279c4295c5784687b7c4f9a7b25807f6b446d3169d9b80d0b",
+    "request.schema.json": "e401482931593a76e993ae8099b422fcd74362cf3178040b929d6794d02e39f2",
+    "response.example.json": "cd1e737534e04bce5b016093783ddc5871b8ab4f0609ea99506332377a3f8e7d",
+    "response.schema.json": "adf7892acd968b37544e5f5d3323d3587d36ccd1734506bc4140f1220a422c0a"
   },
   "python": {
-    "__init__.py": "85ec0f463ce079a535876bf5fcbf4138494d1ac5db7a003ffe17d5ac708a461e",
-    "fixtures.py": "99216261ab11e1980a629f932eaad6afcd2561ae7c753f00c66540933e4d1d51",
-    "mock_server.py": "67414a01601aa05291702b38e7251a99ba73d7873b5df3868fee9d1d1fa90cf3",
-    "models.py": "05da355695682a8eec0b88163b1f2c6691c34c45361794530e1d863af56ab362",
-    "verify.py": "c22306c806dea591c4e7f1adaefad93421f65ca6190c00dfc3cab0461dbfa000"
+    "__init__.py": "5ec7369ea623a5fcbb3d7025b26d090eea07fe98e35820af39e004ac926617ef",
+    "fixtures.py": "4ac9b161be03e1500ce1535537d76f9828ef49aafd86c96908c1b9acf207fb67",
+    "mock_server.py": "008292e2989082754d2ac682fdf254378fb8d20e1e2a8e0678aaad6274386200",
+    "models.py": "5e2dfa8d07366142c2a39a1a024e61d1b249a1dc5c8f9d15b177d2a0303aa27b",
+    "verify.py": "519bfd9879080fe4e043a800d109c99e4a3b2991c607d94904f2a3adff660b7d"
   },
-  "version": "1.1.0"
+  "version": "2.0.0"
 }

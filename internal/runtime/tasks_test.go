@@ -3,6 +3,8 @@ package runtime
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -12,16 +14,14 @@ import (
 	"time"
 
 	"resume-agent-kernel/internal/contract"
-	"resume-agent-kernel/internal/pipeline"
 	p "resume-agent-kernel/internal/protocol"
 	httpserver "resume-agent-kernel/internal/server"
 )
 
-type testDocument struct{ calls int }
-
-func (d *testDocument) Read(context.Context, p.ArtifactRefV1, int) (pipeline.Document, error) {
-	d.calls++
-	return pipeline.Document{Text: strings.Repeat("负责后端服务开发与测试工作。", 20), Checksum: strings.Repeat("a", 64)}, nil
+func testText() p.ResumeTextV2 {
+	text := strings.Repeat("负责后端服务开发与测试工作。", 20)
+	hash := sha256.Sum256([]byte(text))
+	return p.ResumeTextV2{FileSHA256: strings.Repeat("a", 64), TextSHA256: hex.EncodeToString(hash[:]), ExtractorVersion: "fixture/v2", Pages: []string{text}, Status: "ready", Warnings: []string{}}
 }
 
 func TestTaskFailuresKeepSafeSpecificCodes(t *testing.T) {
@@ -56,7 +56,6 @@ func TestTaskFailuresKeepSafeSpecificCodes(t *testing.T) {
 				e.Model.TimeoutSeconds = .01
 			}
 			s := NewService("test")
-			s.Documents = &testDocument{}
 			result, err := s.Execute(context.Background(), e, "unit-test-only")
 			if err != nil || result.Manifest.TerminalState != "FAILED" || result.Manifest.FailureCode != tc.code {
 				t.Fatalf("failure classification: %s, %v", result.Manifest.FailureCode, err)
@@ -70,16 +69,14 @@ func TestTaskFailuresKeepSafeSpecificCodes(t *testing.T) {
 }
 func taskEnvelope() p.TaskEnvelopeV1 {
 	capabilities, _ := NewService("test").Capabilities()
-	return p.TaskEnvelopeV1{ProtocolVersion: p.TaskProtocolVersion, TaskKind: p.ResumeJobMatchTaskKind, TaskID: "task", IdempotencyKey: "key", Pin: p.TaskPinV1{PinID: "pin", KernelBuild: "test", ProtocolVersion: p.TaskProtocolVersion, ToolsetVersion: capabilities.ToolsetVersion, ResultSchemaVersion: p.TaskResultVersion, PolicyVersion: "platform-policy/v99", InstructionVersion: capabilities.InstructionVersion, ModelConfigRevision: "model"}, Snapshot: p.CaseSnapshotV1{Candidate: p.CandidateSnapshotV1{Ref: "candidate"}, Volunteers: []p.VolunteerSnapshotV1{{Ref: "v", Entity: "GW", PositionName: "开发"}}, Jobs: []p.JobSnapshotV1{{Ref: "j", ContentHash: strings.Repeat("a", 64), Entity: "GW", PublicName: "开发", PositionName: "内部开发", DepartmentRef: "d"}}}, Budget: p.TaskBudgetV1{MaxTurns: 5, MaxToolCalls: 20, MaxTokens: 100000, MaxOCRPages: 10, MaxDurationSeconds: 30}}
+	return p.TaskEnvelopeV1{ProtocolVersion: p.TaskProtocolVersion, TaskKind: p.ResumeJobMatchTaskKind, TaskID: "task", IdempotencyKey: "key", Pin: p.TaskPinV1{PinID: "pin", KernelBuild: "test", ProtocolVersion: p.TaskProtocolVersion, ToolsetVersion: capabilities.ToolsetVersion, ResultSchemaVersion: p.TaskResultVersion, PolicyVersion: "platform-policy/v99", InstructionVersion: capabilities.InstructionVersion, ModelConfigRevision: "model"}, Snapshot: p.CaseSnapshotV1{Candidate: p.CandidateSnapshotV1{Ref: "candidate"}, Volunteers: []p.VolunteerSnapshotV1{{Ref: "v", ResumeText: testText(), Entity: "GW", PositionName: "开发"}}, Jobs: []p.JobSnapshotV1{{Ref: "j", ContentHash: strings.Repeat("a", 64), Entity: "GW", PublicName: "开发", PositionName: "内部开发", DepartmentRef: "d"}}}, Budget: p.TaskBudgetV1{MaxTurns: 5, MaxToolCalls: 20, MaxTokens: 100000, MaxDurationSeconds: 30}}
 }
 func TestEmptyAnalysisScopeNeverReadsDocumentOrModel(t *testing.T) {
 	e := taskEnvelope()
 	e.Snapshot.Jobs = nil
 	s := NewService("test")
-	documents := &testDocument{}
-	s.Documents = documents
 	result, err := s.Execute(context.Background(), e, "")
-	if err != nil || result.Manifest.TerminalState != "FAILED" || result.Trace.Turns != 0 || documents.calls != 0 {
+	if err != nil || result.Manifest.TerminalState != "FAILED" || result.Trace.Turns != 0 {
 		t.Fatalf("bad block %+v %v", result, err)
 	}
 }
@@ -100,7 +97,6 @@ func TestTaskHTTPModelUsesCollectorsAndReturnsNoBusinessAction(t *testing.T) {
 	e := taskEnvelope()
 	e.Model = p.ModelConfig{APIStyle: "chat_json", BaseURL: server.URL, ModelName: "fake", TimeoutSeconds: 10}
 	s := NewService("test")
-	s.Documents = &testDocument{}
 	result, err := s.Execute(context.Background(), e, "test-secret")
 	if err != nil || result.Manifest.TerminalState != "DONE" || len(result.Matches) != 1 || result.Matches[0].Score != .8 {
 		t.Fatalf("bad task %+v %v", result, err)
@@ -115,7 +111,7 @@ func TestTaskHTTPModelUsesCollectorsAndReturnsNoBusinessAction(t *testing.T) {
 	}
 	// 真正经过公开 HTTP 边界，验证共享 Schema 与运行时返回的匹配结果。
 	requestData, _ := contract.Bundle.ReadFile("bundle/request.example.json")
-	var request p.AnalysisRequestV1
+	var request p.AnalysisRequestV2
 	json.Unmarshal(requestData, &request)
 	request.Model = e.Model
 	request.Pin = e.Pin

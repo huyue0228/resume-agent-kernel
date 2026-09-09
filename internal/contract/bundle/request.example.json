@@ -1,7 +1,6 @@
 {
   "budget": {
     "max_duration_seconds": 600,
-    "max_ocr_pages": 30,
     "max_tokens": 120000,
     "max_tool_calls": 256,
     "max_turns": 32
@@ -22,20 +21,12 @@
     "model_config_revision": "fixture-model",
     "pin_id": "fixture-pin",
     "policy_version": "fixture-policy/v1",
-    "protocol_version": "resume-analysis/v1",
+    "protocol_version": "resume-analysis/v2",
     "result_schema_version": "resume-job-match/v1",
     "toolset_version": "fixture-tools/v1"
   },
-  "protocol_version": "resume-analysis/v1",
+  "protocol_version": "resume-analysis/v2",
   "scope": {
-    "artifact": {
-      "checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "expires_at": 2100000000,
-      "media_type": "application/pdf",
-      "path": "resumes/fixture.pdf",
-      "signature": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "size_bytes": 100
-    },
     "candidate": {
       "highest_education": "本科",
       "highest_major": "软件工程",
@@ -73,6 +64,16 @@
         "responsibilities": "服务开发与测试"
       }
     ],
+    "resume_text": {
+      "extractor_version": "fixture/v2",
+      "file_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "pages": [
+        "负责后端服务开发与测试工作，完成接口设计和自动化测试。\n负责后端服务开发与测试工作，完成接口设计和自动化测试。\n负责后端服务开发与测试工作，完成接口设计和自动化测试。\n负责后端服务开发与测试工作，完成接口设计和自动化测试。\n负责后端服务开发与测试工作，完成接口设计和自动化测试。\n负责后端服务开发与测试工作，完成接口设计和自动化测试。\n负责后端服务开发与测试工作，完成接口设计和自动化测试。\n负责后端服务开发与测试工作，完成接口设计和自动化测试。\n负责后端服务开发与测试工作，完成接口设计和自动化测试。\n负责后端服务开发与测试工作，完成接口设计和自动化测试。\n负责后端服务开发与测试工作，完成接口设计和自动化测试。\n负责后端服务开发与测试工作，完成接口设计和自动化测试。\n负责后端服务开发与测试工作，完成接口设计和自动化测试。\n负责后端服务开发与测试工作，完成接口设计和自动化测试。\n负责后端服务开发与测试工作，完成接口设计和自动化测试。\n负责后端服务开发与测试工作，完成接口设计和自动化测试。\n负责后端服务开发与测试工作，完成接口设计和自动化测试。\n负责后端服务开发与测试工作，完成接口设计和自动化测试。\n负责后端服务开发与测试工作，完成接口设计和自动化测试。\n负责后端服务开发与测试工作，完成接口设计和自动化测试。\n"
+      ],
+      "status": "ready",
+      "text_sha256": "888917da35372cc0e17a0597b695b32ad639808645d0d7b6bc455597bdc86c87",
+      "warnings": []
+    },
     "taxonomy": [],
     "volunteer_ref": "volunteer-fixture"
   },

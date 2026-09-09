@@ -17,8 +17,8 @@ type KernelCapabilitiesV1 struct {
 
 var ErrVersionUnavailable = errors.New("kernel_version_unavailable")
 
-// AnalysisRequestV1 是唯一公开的候选人级输入；不接受准入规则、历史志愿或 HC。
-type AnalysisRequestV1 struct {
+// AnalysisRequestV2 是唯一公开的候选人级输入；不接受准入规则、历史志愿或 HC。
+type AnalysisRequestV2 struct {
 	ProtocolVersion  string          `json:"protocol_version"`
 	TaskKind         string          `json:"task_kind"`
 	TaskID           string          `json:"task_id"`
@@ -26,15 +26,15 @@ type AnalysisRequestV1 struct {
 	Trigger          string          `json:"trigger"`
 	WorkflowRevision int64           `json:"workflow_revision"`
 	Pin              TaskPinV1       `json:"pin"`
-	Scope            AnalysisScopeV1 `json:"scope"`
+	Scope            AnalysisScopeV2 `json:"scope"`
 	Model            ModelConfig     `json:"model"`
 	Budget           TaskBudgetV1    `json:"budget"`
 }
 
-type AnalysisScopeV1 struct {
+type AnalysisScopeV2 struct {
 	Candidate    AnalysisCandidateV1 `json:"candidate"`
 	VolunteerRef string              `json:"volunteer_ref"`
-	Artifact     ArtifactRefV1       `json:"artifact"`
+	ResumeText   ResumeTextV2        `json:"resume_text"`
 	Jobs         []AnalysisJobV1     `json:"jobs"`
 	Taxonomy     []MajorAliasV1      `json:"taxonomy"`
 }
@@ -59,7 +59,7 @@ type AnalysisJobV1 struct {
 	DepartmentName   string   `json:"department_name"`
 }
 
-func (a AnalysisRequestV1) TaskInput() (TaskEnvelopeV1, error) {
+func (a AnalysisRequestV2) TaskInput() (TaskEnvelopeV1, error) {
 	if a.WorkflowRevision < 0 || a.Scope.VolunteerRef == "" || len(a.Scope.Jobs) == 0 {
 		return TaskEnvelopeV1{}, errors.New("invalid admitted scope")
 	}
@@ -72,11 +72,11 @@ func (a AnalysisRequestV1) TaskInput() (TaskEnvelopeV1, error) {
 		IdempotencyKey: a.IdempotencyKey, Trigger: a.Trigger, Pin: a.Pin, Model: a.Model, Budget: a.Budget,
 		Snapshot: CaseSnapshotV1{Candidate: CandidateSnapshotV1{Ref: a.Scope.Candidate.Ref, HighestMajor: a.Scope.Candidate.HighestMajor, HighestEducation: a.Scope.Candidate.HighestEducation},
 			Workflow: WorkflowSnapshotV1{Revision: a.WorkflowRevision}, Taxonomy: a.Scope.Taxonomy, Jobs: jobs,
-			Volunteers: []VolunteerSnapshotV1{{Ref: a.Scope.VolunteerRef, Artifact: a.Scope.Artifact}}}}
+			Volunteers: []VolunteerSnapshotV1{{Ref: a.Scope.VolunteerRef, ResumeText: a.Scope.ResumeText}}}}
 	return e, e.Validate()
 }
 
-type AnalysisResponseV1 struct {
+type AnalysisResponseV2 struct {
 	ProtocolVersion  string              `json:"protocol_version"`
 	TaskID           string              `json:"task_id"`
 	IdempotencyKey   string              `json:"idempotency_key"`

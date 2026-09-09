@@ -17,9 +17,9 @@ func TestPublishedFixturesAndGoWireRoundTrip(t *testing.T) {
 		}
 		var value any
 		if name == "request" {
-			value = &p.AnalysisRequestV1{}
+			value = &p.AnalysisRequestV2{}
 		} else if name == "response" {
-			value = &p.AnalysisResponseV1{}
+			value = &p.AnalysisResponseV2{}
 		} else {
 			value = &p.KernelCapabilitiesV1{}
 		}

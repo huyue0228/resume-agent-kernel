@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"resume-agent-kernel/internal/agent"
 	"resume-agent-kernel/internal/llmloop"
-	"resume-agent-kernel/internal/pipeline"
 	p "resume-agent-kernel/internal/protocol"
 	"resume-agent-kernel/internal/session"
 	"resume-agent-kernel/internal/tools"
@@ -14,7 +13,6 @@ import (
 )
 
 type Service struct {
-	Documents         pipeline.DocumentProvider
 	tasks             session.Store
 	Build             string
 	externalProviders []tools.Provider

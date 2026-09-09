@@ -1,11 +1,8 @@
 {
   "$defs": {
-    "AnalysisScopeV1": {
+    "AnalysisScopeV2": {
       "additionalProperties": false,
       "properties": {
-        "artifact": {
-          "$ref": "#/$defs/ArtifactV1"
-        },
         "candidate": {
           "$ref": "#/$defs/CandidateContextV1"
         },
@@ -17,6 +14,9 @@
           "minItems": 1,
           "title": "Jobs",
           "type": "array"
+        },
+        "resume_text": {
+          "$ref": "#/$defs/ResumeTextV2"
         },
         "taxonomy": {
           "items": {
@@ -35,57 +35,10 @@
       "required": [
         "candidate",
         "volunteer_ref",
-        "artifact",
+        "resume_text",
         "jobs"
       ],
-      "title": "AnalysisScopeV1",
-      "type": "object"
-    },
-    "ArtifactV1": {
-      "additionalProperties": false,
-      "properties": {
-        "checksum": {
-          "pattern": "^[a-f0-9]{64}$",
-          "title": "Checksum",
-          "type": "string"
-        },
-        "expires_at": {
-          "exclusiveMinimum": 0,
-          "title": "Expires At",
-          "type": "integer"
-        },
-        "media_type": {
-          "const": "application/pdf",
-          "default": "application/pdf",
-          "title": "Media Type",
-          "type": "string"
-        },
-        "path": {
-          "maxLength": 1024,
-          "minLength": 1,
-          "title": "Path",
-          "type": "string"
-        },
-        "signature": {
-          "pattern": "^[a-f0-9]{64}$",
-          "title": "Signature",
-          "type": "string"
-        },
-        "size_bytes": {
-          "exclusiveMinimum": 0,
-          "maximum": 33554432,
-          "title": "Size Bytes",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "path",
-        "checksum",
-        "size_bytes",
-        "expires_at",
-        "signature"
-      ],
-      "title": "ArtifactV1",
+      "title": "AnalysisScopeV2",
       "type": "object"
     },
     "CandidateContextV1": {
@@ -271,6 +224,62 @@
       "title": "ModelConfigV1",
       "type": "object"
     },
+    "ResumeTextV2": {
+      "additionalProperties": false,
+      "description": "唯一正文是 pages。页号从 1 开始；每页按 LF 分行，空页也占一行。\n\nCRLF/CR 在提取端统一为 LF，其余空白和末尾 LF 保留，不做 Unicode\n改写。全文仅在使用时以 FF 连接各页，UTF-8 编码后计算 text_sha256。",
+      "properties": {
+        "extractor_version": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Extractor Version",
+          "type": "string"
+        },
+        "file_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "File Sha256",
+          "type": "string"
+        },
+        "pages": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "title": "Pages",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "needs_attention"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "text_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Text Sha256",
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 200,
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "file_sha256",
+        "text_sha256",
+        "extractor_version",
+        "pages",
+        "status"
+      ],
+      "title": "ResumeTextV2",
+      "type": "object"
+    },
     "TaskBudgetV1": {
       "additionalProperties": false,
       "properties": {
@@ -279,13 +288,6 @@
           "maximum": 1800,
           "minimum": 1,
           "title": "Max Duration Seconds",
-          "type": "integer"
-        },
-        "max_ocr_pages": {
-          "default": 30,
-          "maximum": 100,
-          "minimum": 1,
-          "title": "Max Ocr Pages",
           "type": "integer"
         },
         "max_tokens": {
@@ -346,8 +348,8 @@
           "type": "string"
         },
         "protocol_version": {
-          "const": "resume-analysis/v1",
-          "default": "resume-analysis/v1",
+          "const": "resume-analysis/v2",
+          "default": "resume-analysis/v2",
           "title": "Protocol Version",
           "type": "string"
         },
@@ -394,13 +396,13 @@
       "$ref": "#/$defs/TaskPinV1"
     },
     "protocol_version": {
-      "const": "resume-analysis/v1",
-      "default": "resume-analysis/v1",
+      "const": "resume-analysis/v2",
+      "default": "resume-analysis/v2",
       "title": "Protocol Version",
       "type": "string"
     },
     "scope": {
-      "$ref": "#/$defs/AnalysisScopeV1"
+      "$ref": "#/$defs/AnalysisScopeV2"
     },
     "task_id": {
       "maxLength": 128,
@@ -433,6 +435,6 @@
     "scope",
     "model"
   ],
-  "title": "AnalysisRequestV1",
+  "title": "AnalysisRequestV2",
   "type": "object"
 }

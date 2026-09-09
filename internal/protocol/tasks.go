@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	TaskProtocolVersion    = "resume-analysis/v1"
+	TaskProtocolVersion    = "resume-analysis/v2"
 	ResumeJobMatchTaskKind = "candidate.resume_job_match"
 	TaskResultVersion      = "resume-job-match/v1"
 )
@@ -27,29 +27,30 @@ type TaskBudgetV1 struct {
 	MaxTurns           int `json:"max_turns"`
 	MaxToolCalls       int `json:"max_tool_calls"`
 	MaxDurationSeconds int `json:"max_duration_seconds"`
-	MaxOCRPages        int `json:"max_ocr_pages"`
 	MaxTokens          int `json:"max_tokens"`
 }
 
 type CandidateSnapshotV1 = AnalysisCandidateV1
 
-type ArtifactRefV1 struct {
-	Path       string `json:"path,omitempty"`
-	Checksum   string `json:"checksum"`
-	MediaType  string `json:"media_type"`
-	SizeBytes  int64  `json:"size_bytes"`
-	ExpiresAt  int64  `json:"expires_at,omitempty"`
-	Signature  string `json:"signature,omitempty"`
-	InlineText string `json:"inline_text,omitempty"`
+const MaxTextBytes = 1 << 20
+const MaxRequestBytes = 2 << 20
+
+type ResumeTextV2 struct {
+	FileSHA256       string   `json:"file_sha256"`
+	TextSHA256       string   `json:"text_sha256"`
+	ExtractorVersion string   `json:"extractor_version"`
+	Pages            []string `json:"pages"`
+	Status           string   `json:"status"`
+	Warnings         []string `json:"warnings"`
 }
 
 type VolunteerSnapshotV1 struct {
-	Ref          string        `json:"ref"`
-	PositionName string        `json:"position_name"`
-	Entity       string        `json:"entity"`
-	ApplyDate    string        `json:"apply_date"`
-	Rejected     bool          `json:"rejected"`
-	Artifact     ArtifactRefV1 `json:"artifact"`
+	Ref          string       `json:"ref"`
+	PositionName string       `json:"position_name"`
+	Entity       string       `json:"entity"`
+	ApplyDate    string       `json:"apply_date"`
+	Rejected     bool         `json:"rejected"`
+	ResumeText   ResumeTextV2 `json:"resume_text"`
 }
 
 type JobSnapshotV1 = AnalysisJobV1
@@ -110,7 +111,7 @@ func (e TaskEnvelopeV1) Validate() error {
 		}
 	}
 	b := e.Budget
-	if b.MaxTurns < 1 || b.MaxTurns > 64 || b.MaxToolCalls < 1 || b.MaxToolCalls > 512 || b.MaxDurationSeconds < 1 || b.MaxDurationSeconds > 1800 || b.MaxOCRPages < 1 || b.MaxOCRPages > 100 || b.MaxTokens < 1 || b.MaxTokens > 1000000 {
+	if b.MaxTurns < 1 || b.MaxTurns > 64 || b.MaxToolCalls < 1 || b.MaxToolCalls > 512 || b.MaxDurationSeconds < 1 || b.MaxDurationSeconds > 1800 || b.MaxTokens < 1 || b.MaxTokens > 1000000 {
 		return errors.New("invalid task budget")
 	}
 	if e.Snapshot.Candidate.Ref == "" || len(e.Snapshot.Volunteers) == 0 || len(e.Snapshot.Volunteers) > 100 || len(e.Snapshot.Jobs) > 2000 {

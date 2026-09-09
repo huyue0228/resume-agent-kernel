@@ -15,10 +15,10 @@ import (
 	"resume-agent-kernel/internal/protocol"
 )
 
-const maxRequestBytes = 2 << 20
+const maxRequestBytes = protocol.MaxRequestBytes
 
 type Evaluator interface {
-	ExecuteAnalysis(context.Context, protocol.AnalysisRequestV1, string) (protocol.AnalysisResponseV1, error)
+	ExecuteAnalysis(context.Context, protocol.AnalysisRequestV2, string) (protocol.AnalysisResponseV2, error)
 	Capabilities() (protocol.KernelCapabilitiesV1, error)
 }
 
@@ -67,18 +67,31 @@ func (h *Handler) executeTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBytes)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	var raw json.RawMessage
-	if decoder.Decode(&raw) != nil || decoder.Decode(&struct{}{}) != io.EOF {
-		writeError(w, 400, "invalid_envelope", "invalid TaskEnvelopeV1")
+	raw, readErr := io.ReadAll(r.Body)
+	var tooLarge *http.MaxBytesError
+	if errors.As(readErr, &tooLarge) {
+		writeError(w, 413, "request_too_large", "Encoded request exceeds 2 MiB")
+		return
+	}
+	if readErr != nil || !json.Valid(raw) {
+		writeError(w, 400, "invalid_envelope", "Invalid analysis request JSON")
+		return
+	}
+	var header struct {
+		ProtocolVersion string `json:"protocol_version"`
+		Pin             struct {
+			ProtocolVersion string `json:"protocol_version"`
+		} `json:"pin"`
+	}
+	if json.Unmarshal(raw, &header) != nil || header.ProtocolVersion != protocol.TaskProtocolVersion || header.Pin.ProtocolVersion != protocol.TaskProtocolVersion {
+		writeError(w, 409, "agent_protocol_incompatible", "Expected resume-analysis/v2")
 		return
 	}
 	if err := contract.Validate("request", raw); err != nil {
 		writeError(w, 422, "invalid_envelope", "Analysis request contract invalid")
 		return
 	}
-	var e protocol.AnalysisRequestV1
+	var e protocol.AnalysisRequestV2
 	if json.Unmarshal(raw, &e) != nil {
 		writeError(w, 400, "invalid_envelope", "Invalid analysis request")
 		return
