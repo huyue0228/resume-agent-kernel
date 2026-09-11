@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	TaskProtocolVersion    = "resume-analysis/v2"
-	ResumeJobMatchTaskKind = "candidate.resume_job_match"
-	TaskResultVersion      = "resume-job-match/v1"
+	TaskProtocolVersion    = "resume-analysis/v3"
+	ResumeJobMatchTaskKind = "candidate.application_assessment"
+	TaskResultVersion      = "resume-application-assessment/v1"
 )
 
 type TaskPinV1 struct {
@@ -60,6 +60,7 @@ type WorkflowSnapshotV1 struct {
 }
 
 type CaseSnapshotV1 struct {
+	TagCatalog []AbilityTagV1        `json:"tag_catalog,omitempty"`
 	Taxonomy   []MajorAliasV1        `json:"taxonomy,omitempty"`
 	Candidate  CandidateSnapshotV1   `json:"candidate"`
 	Workflow   WorkflowSnapshotV1    `json:"workflow"`
@@ -165,6 +166,21 @@ type CandidateProfileV1 struct {
 	SourceText string           `json:"source_text,omitempty"`
 	Claims     []ProfileClaimV1 `json:"claims"`
 	Risks      []string         `json:"risks"`
+	Tags       []TagAssertionV1 `json:"tags,omitempty"`
+}
+
+type AbilityTagV1 struct {
+	Code        string `json:"code"`
+	Name        string `json:"name"`
+	Category    string `json:"category"`
+	Description string `json:"description"`
+}
+
+type TagAssertionV1 struct {
+	Code       string       `json:"code"`
+	Confidence float64      `json:"confidence"`
+	Status     string       `json:"status"`
+	Evidence   []EvidenceV1 `json:"evidence"`
 }
 
 type JobMatchV1 struct {

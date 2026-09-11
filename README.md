@@ -20,7 +20,7 @@ AGENT_KERNEL_TOKEN='<random-service-token>' \
 AGENT_KERNEL_ADDRESS='127.0.0.1:8090' dist/agent-kernel
 ```
 
-健康检查 `GET /healthz` 不承担版本校验；认证的 `GET /v2/capabilities` 返回实际 build、工具注册表指纹及嵌入指令指纹。公开候选人分析入口 `POST /v2/tasks/execute`，协议为 `resume-analysis/v2`，携带 `X-Agent-Kernel-Token`。模型密钥只通过请求头 `X-Model-API-Key` 传入，不进入协议正文或日志。
+健康检查 `GET /healthz` 不承担版本校验；认证的 `GET /v2/capabilities` 返回实际 build、工具注册表指纹及嵌入指令指纹。公开候选人分析入口 `POST /v2/tasks/execute`，协议为 `resume-analysis/v3`，携带 `X-Agent-Kernel-Token`。模型密钥只通过请求头 `X-Model-API-Key` 传入，不进入协议正文或日志。
 
 请求/结果 Schema 与合成样例在 `internal/contract/bundle/`，由 resume-contracts 仓发布工具生成并固定版本。服务同时校验请求与结果 Schema，测试验证 Go 序列化兼容性；不通过相对路径引用协议仓。
 
@@ -57,3 +57,5 @@ GitLab 检查与 GitHub 工作流调用同一 Makefile，不依赖外部 CI 的�
 输入携带原 PDF SHA256、文本 SHA256、提取器版本和按页完整文本；空白页与页内换行保留，全局行号由协议统一定义。平台提取并校验文本，Kernel 校验全文校验值与证据引用；无有效文本或材料待处理状态不能作为完整分析输入。
 
 代码回退依赖 Git 提交及版本标签，不创建源码副本；GitHub Release 上传并回下载校验后清理本地临时分发物。
+
+公开 v3 任务为 `candidate.application_assessment`，结果结构为 `resume-application-assessment/v1`。`scope.jobs` 固定为一个当前投递标准；`scope.tag_catalog` 定义可提取的能力标签，`profile.tags` 返回标签编码、原文证据、置信度及已支持/待核实状态。未知标签和无效证据被拒绝；置信度低于 0.8 降为待核实。部门岗位池、入池资格、人工复核、HC 和分配均由平台负责。部署时需升级配套的 v3 平台，保留既有 HTTP 路径和完整文本输入。

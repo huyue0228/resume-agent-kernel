@@ -18,7 +18,7 @@ import (
 const maxRequestBytes = protocol.MaxRequestBytes
 
 type Evaluator interface {
-	ExecuteAnalysis(context.Context, protocol.AnalysisRequestV2, string) (protocol.AnalysisResponseV2, error)
+	ExecuteAnalysis(context.Context, protocol.AnalysisRequestV3, string) (protocol.AnalysisResponseV3, error)
 	Capabilities() (protocol.KernelCapabilitiesV1, error)
 }
 
@@ -84,14 +84,14 @@ func (h *Handler) executeTask(w http.ResponseWriter, r *http.Request) {
 		} `json:"pin"`
 	}
 	if json.Unmarshal(raw, &header) != nil || header.ProtocolVersion != protocol.TaskProtocolVersion || header.Pin.ProtocolVersion != protocol.TaskProtocolVersion {
-		writeError(w, 409, "agent_protocol_incompatible", "Expected resume-analysis/v2")
+		writeError(w, 409, "agent_protocol_incompatible", "Expected resume-analysis/v3")
 		return
 	}
 	if err := contract.Validate("request", raw); err != nil {
 		writeError(w, 422, "invalid_envelope", "Analysis request contract invalid")
 		return
 	}
-	var e protocol.AnalysisRequestV2
+	var e protocol.AnalysisRequestV3
 	if json.Unmarshal(raw, &e) != nil {
 		writeError(w, 400, "invalid_envelope", "Invalid analysis request")
 		return

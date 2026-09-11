@@ -18,23 +18,23 @@ import (
 	"resume-agent-kernel/internal/tools"
 )
 
-func (s *Service) ExecuteAnalysis(ctx context.Context, a p.AnalysisRequestV2, key string) (p.AnalysisResponseV2, error) {
+func (s *Service) ExecuteAnalysis(ctx context.Context, a p.AnalysisRequestV3, key string) (p.AnalysisResponseV3, error) {
 	e, err := a.TaskInput()
 	if err != nil {
-		return p.AnalysisResponseV2{}, err
+		return p.AnalysisResponseV3{}, err
 	}
 	r, err := s.Execute(ctx, e, key)
 	if err != nil {
-		return p.AnalysisResponseV2{}, err
+		return p.AnalysisResponseV3{}, err
 	}
-	result := p.AnalysisResponseV2{ProtocolVersion: r.ProtocolVersion, TaskID: r.TaskID, IdempotencyKey: r.IdempotencyKey,
+	result := p.AnalysisResponseV3{ProtocolVersion: r.ProtocolVersion, TaskID: r.TaskID, IdempotencyKey: r.IdempotencyKey,
 		Pin: r.Pin, WorkflowRevision: r.WorkflowRevision, Profile: r.Profile, Matches: r.Matches, Manifest: r.Manifest, Trace: r.Trace}
 	raw, err := json.Marshal(result)
 	if err != nil {
 		return result, err
 	}
 	if err = contract.Validate("response", raw); err != nil {
-		return p.AnalysisResponseV2{}, errors.New("analysis response contract invalid")
+		return p.AnalysisResponseV3{}, errors.New("analysis response contract invalid")
 	}
 	return result, nil
 }
@@ -113,6 +113,7 @@ func (s *Service) runTask(ctx context.Context, e p.TaskEnvelopeV1, key, hash str
 	}
 	result.Manifest.ResumeChecksum = document.Checksum
 	collector := agent.NewCollector(document.Text, jobs)
+	collector.TagCatalog = e.Snapshot.TagCatalog
 	client, err := model.NewHTTPClient(e.Model, key)
 	if err != nil {
 		return result, err
@@ -121,6 +122,7 @@ func (s *Service) runTask(ctx context.Context, e p.TaskEnvelopeV1, key, hash str
 	for offset := 0; offset < len(jobs); offset += 24 {
 		chunk := jobs[offset:min(offset+24, len(jobs))]
 		part := agent.NewCollector(document.Text, chunk)
+		part.TagCatalog = e.Snapshot.TagCatalog
 		part.Profile = collector.Profile
 		constraints := result.Deterministic
 		constraints.JobRefs = []string{}

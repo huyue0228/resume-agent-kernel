@@ -17,8 +17,8 @@ type KernelCapabilitiesV1 struct {
 
 var ErrVersionUnavailable = errors.New("kernel_version_unavailable")
 
-// AnalysisRequestV2 是唯一公开的候选人级输入；不接受准入规则、历史志愿或 HC。
-type AnalysisRequestV2 struct {
+// AnalysisRequestV3 是唯一公开的候选人级输入；不接受准入规则、历史志愿或 HC。
+type AnalysisRequestV3 struct {
 	ProtocolVersion  string          `json:"protocol_version"`
 	TaskKind         string          `json:"task_kind"`
 	TaskID           string          `json:"task_id"`
@@ -26,17 +26,18 @@ type AnalysisRequestV2 struct {
 	Trigger          string          `json:"trigger"`
 	WorkflowRevision int64           `json:"workflow_revision"`
 	Pin              TaskPinV1       `json:"pin"`
-	Scope            AnalysisScopeV2 `json:"scope"`
+	Scope            AnalysisScopeV3 `json:"scope"`
 	Model            ModelConfig     `json:"model"`
 	Budget           TaskBudgetV1    `json:"budget"`
 }
 
-type AnalysisScopeV2 struct {
+type AnalysisScopeV3 struct {
 	Candidate    AnalysisCandidateV1 `json:"candidate"`
 	VolunteerRef string              `json:"volunteer_ref"`
 	ResumeText   ResumeTextV2        `json:"resume_text"`
 	Jobs         []AnalysisJobV1     `json:"jobs"`
 	Taxonomy     []MajorAliasV1      `json:"taxonomy"`
+	TagCatalog   []AbilityTagV1      `json:"tag_catalog,omitempty"`
 }
 type AnalysisCandidateV1 struct {
 	Ref              string `json:"ref"`
@@ -59,8 +60,8 @@ type AnalysisJobV1 struct {
 	DepartmentName   string   `json:"department_name"`
 }
 
-func (a AnalysisRequestV2) TaskInput() (TaskEnvelopeV1, error) {
-	if a.WorkflowRevision < 0 || a.Scope.VolunteerRef == "" || len(a.Scope.Jobs) == 0 {
+func (a AnalysisRequestV3) TaskInput() (TaskEnvelopeV1, error) {
+	if a.WorkflowRevision < 0 || a.Scope.VolunteerRef == "" || len(a.Scope.Jobs) != 1 {
 		return TaskEnvelopeV1{}, errors.New("invalid admitted scope")
 	}
 	jobs := []JobSnapshotV1{}
@@ -71,12 +72,12 @@ func (a AnalysisRequestV2) TaskInput() (TaskEnvelopeV1, error) {
 	e := TaskEnvelopeV1{ProtocolVersion: a.ProtocolVersion, TaskKind: a.TaskKind, TaskID: a.TaskID,
 		IdempotencyKey: a.IdempotencyKey, Trigger: a.Trigger, Pin: a.Pin, Model: a.Model, Budget: a.Budget,
 		Snapshot: CaseSnapshotV1{Candidate: CandidateSnapshotV1{Ref: a.Scope.Candidate.Ref, HighestMajor: a.Scope.Candidate.HighestMajor, HighestEducation: a.Scope.Candidate.HighestEducation},
-			Workflow: WorkflowSnapshotV1{Revision: a.WorkflowRevision}, Taxonomy: a.Scope.Taxonomy, Jobs: jobs,
+			Workflow: WorkflowSnapshotV1{Revision: a.WorkflowRevision}, Taxonomy: a.Scope.Taxonomy, Jobs: jobs, TagCatalog: a.Scope.TagCatalog,
 			Volunteers: []VolunteerSnapshotV1{{Ref: a.Scope.VolunteerRef, ResumeText: a.Scope.ResumeText}}}}
 	return e, e.Validate()
 }
 
-type AnalysisResponseV2 struct {
+type AnalysisResponseV3 struct {
 	ProtocolVersion  string              `json:"protocol_version"`
 	TaskID           string              `json:"task_id"`
 	IdempotencyKey   string              `json:"idempotency_key"`

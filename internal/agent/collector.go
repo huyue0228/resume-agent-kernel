@@ -20,12 +20,13 @@ type Line struct {
 	Text   string `json:"text"`
 }
 type Collector struct {
-	Profile *p.CandidateProfileV1
-	Matches map[string]p.JobMatchV1
-	Jobs    map[string]p.JobSnapshotV1
-	Lines   []Line
-	Done    bool
-	Failed  bool
+	TagCatalog []p.AbilityTagV1
+	Profile    *p.CandidateProfileV1
+	Matches    map[string]p.JobMatchV1
+	Jobs       map[string]p.JobSnapshotV1
+	Lines      []Line
+	Done       bool
+	Failed     bool
 }
 
 func NewCollector(text string, jobs []p.JobSnapshotV1) *Collector {
@@ -106,6 +107,22 @@ func (c *Collector) SubmitProfile(profile p.CandidateProfileV1) error {
 		}
 		if strings.TrimSpace(claim.Summary) == "" || !c.verifyAll(claim.Evidence) {
 			return errors.New("profile evidence invalid")
+		}
+	}
+	seenTags := map[string]bool{}
+	for i, tag := range profile.Tags {
+		known := false
+		for _, definition := range c.TagCatalog {
+			if definition.Code == tag.Code {
+				known = true
+			}
+		}
+		if !known || seenTags[tag.Code] || math.IsNaN(tag.Confidence) || tag.Confidence < 0 || tag.Confidence > 1 || (tag.Status != "supported" && tag.Status != "needs_verification") || !c.verifyAll(tag.Evidence) {
+			return errors.New("tag code, confidence or evidence invalid")
+		}
+		seenTags[tag.Code] = true
+		if tag.Confidence < .8 {
+			profile.Tags[i].Status = "needs_verification"
 		}
 	}
 	c.Profile = &profile

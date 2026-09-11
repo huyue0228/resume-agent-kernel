@@ -12,9 +12,9 @@ import (
 
 type fakeEvaluator struct{ called bool }
 
-func (e *fakeEvaluator) ExecuteAnalysis(context.Context, p.AnalysisRequestV2, string) (p.AnalysisResponseV2, error) {
+func (e *fakeEvaluator) ExecuteAnalysis(context.Context, p.AnalysisRequestV3, string) (p.AnalysisResponseV3, error) {
 	e.called = true
-	return p.AnalysisResponseV2{}, nil
+	return p.AnalysisResponseV3{}, nil
 }
 func (e *fakeEvaluator) Capabilities() (p.KernelCapabilitiesV1, error) {
 	return p.KernelCapabilitiesV1{ProtocolVersion: p.TaskProtocolVersion, ResultSchemaVersion: p.TaskResultVersion, TaskKinds: []string{p.ResumeJobMatchTaskKind}, KernelBuild: "build-1", ToolsetVersion: "tools/future", InstructionVersion: "instructions/future"}, nil

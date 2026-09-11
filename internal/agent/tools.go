@@ -43,7 +43,7 @@ func (v *Provider) Execute(ctx context.Context, call p.ToolCall) (tools.Result, 
 		value = map[string]any{"volunteer_ref": v.Constraints.CurrentVolunteerRef, "job_refs": v.Constraints.JobRefs,
 			"scope_policy": "只分析当前材料和已授权岗位；禁止扩大范围或产生业务动作"}
 	case "candidate.read_context":
-		value = map[string]string{"highest_major": v.Candidate.HighestMajor, "highest_education": v.Candidate.HighestEducation}
+		value = map[string]any{"highest_major": v.Candidate.HighestMajor, "highest_education": v.Candidate.HighestEducation, "tag_catalog": c.TagCatalog}
 	case "resume.list_sections":
 		sections := []map[string]int{}
 		for _, line := range c.Lines {
