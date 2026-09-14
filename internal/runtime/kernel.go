@@ -1,10 +1,13 @@
 package runtime
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"resume-agent-kernel/internal/agent"
+	"resume-agent-kernel/internal/allocation"
+	"resume-agent-kernel/internal/contract"
 	"resume-agent-kernel/internal/llmloop"
 	p "resume-agent-kernel/internal/protocol"
 	"resume-agent-kernel/internal/session"
@@ -13,6 +16,7 @@ import (
 )
 
 type Service struct {
+	allocation        *allocation.Service
 	tasks             session.Store
 	Build             string
 	externalProviders []tools.Provider
@@ -21,7 +25,7 @@ type Service struct {
 }
 
 func NewService(build string, externalProviders ...tools.Provider) *Service {
-	s := &Service{Build: build, externalProviders: externalProviders}
+	s := &Service{Build: build, externalProviders: externalProviders, allocation: allocation.New(build)}
 	providers := append([]tools.Provider{&agent.Provider{}}, externalProviders...)
 	registry, err := tools.NewProviders(providers...)
 	s.capabilityErr = err
@@ -49,4 +53,11 @@ func randomID() string {
 		return fmt.Sprintf("trace-%d", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(buffer)
+}
+
+func (s *Service) AllocationCapabilities() contract.AllocationCapabilities {
+	return s.allocation.Capabilities()
+}
+func (s *Service) ExecuteAllocation(ctx context.Context, r contract.AllocationRequest) (contract.AllocationResponse, error) {
+	return s.allocation.Execute(ctx, r)
 }

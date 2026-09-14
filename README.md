@@ -59,3 +59,9 @@ GitLab 检查与 GitHub 工作流调用同一 Makefile，不依赖外部 CI 的�
 代码回退依赖 Git 提交及版本标签，不创建源码副本；GitHub Release 上传并回下载校验后清理本地临时分发物。
 
 公开 v3 任务为 `candidate.application_assessment`，结果结构为 `resume-application-assessment/v1`。`scope.jobs` 固定为一个当前投递标准；`scope.tag_catalog` 定义可提取的能力标签，`profile.tags` 返回标签编码、原文证据、置信度及已支持/待核实状态。未知标签和无效证据被拒绝；置信度低于 0.8 降为待核实。部门岗位池、入池资格、人工复核、HC 和分配均由平台负责。部署时需升级配套的 v3 平台，保留既有 HTTP 路径和完整文本输入。
+
+分配 Agent 与筛选共用部署，提供 `GET /v2/allocation/capabilities` 和 `POST /v2/allocation/tasks/execute`（同样使用 `X-Agent-Kernel-Token`）。协议包 3.1.0 保留筛选 v3，新增 `resume-allocation/v1` / `resume-allocation-plan/v1`。
+
+`internal/allocation` 的确定性执行器仅处理白名单资格、标签、允许需求、7 天供给和版本引用，按“优先标签命中数降序、priority 升序、供给升序、最后序号升序、需求 ID 升序”输出方案。`counted_demand_ids` 标识当前候选人在窗口内已计入供给的需求，防止批内重复累计。每成员恰好一个 assign/wait；平台需独立复算、校验版本并提交。
+
+该模块有独立 4 个并发槽、256 项/5 分钟幂等缓存、最多 100 人/200 条需求/2 MiB、30 秒/16 次工具调用预算、60 秒快照期限。六个固定步骤有独立工具名及安全轨迹，不调用 LLM、简历工具、数据库或全局外部 MCP。没有新增容器，也不具备业务写入权限。

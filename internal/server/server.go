@@ -34,6 +34,8 @@ func New(evaluator Evaluator, token string, logger *slog.Logger) http.Handler {
 		logger = slog.Default()
 	}
 	handler := &Handler{evaluator: evaluator, token: token, logger: logger, mux: http.NewServeMux()}
+	handler.mux.HandleFunc("GET /v2/allocation/capabilities", handler.allocationCapabilities)
+	handler.mux.HandleFunc("POST /v2/allocation/tasks/execute", handler.executeAllocation)
 	handler.mux.HandleFunc("GET /healthz", handler.health)
 	handler.mux.HandleFunc("GET /v2/capabilities", handler.capabilities)
 	handler.mux.HandleFunc("POST /v2/tasks/execute", handler.executeTask)
