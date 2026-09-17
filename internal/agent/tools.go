@@ -15,7 +15,6 @@ import (
 var catalog []byte
 
 type Provider struct {
-	Taxonomy    []p.MajorAliasV1
 	Collector   *Collector
 	Candidate   p.CandidateSnapshotV1
 	Constraints p.DeterministicResultV1
@@ -66,7 +65,7 @@ func (v *Provider) Execute(ctx context.Context, call p.ToolCall) (tools.Result, 
 			return tools.Result{}, errors.New("invalid line range, maximum 200 lines")
 		}
 		value = c.Lines[a.Start-1 : a.End]
-	case "resume.search_evidence", "job.search_requirements", "taxonomy.lookup_major":
+	case "resume.search_evidence", "job.search_requirements":
 		var a struct {
 			Query string `json:"query"`
 		}
@@ -87,15 +86,6 @@ func (v *Provider) Execute(ctx context.Context, call p.ToolCall) (tools.Result, 
 				}
 			}
 			value = lines
-		} else if call.Name == "taxonomy.lookup_major" {
-			matches := []string{}
-			for _, alias := range v.Taxonomy {
-				q, n := norm(strings.ToLower(a.Query)), norm(strings.ToLower(alias.Name))
-				if q == n || (alias.MatchType == "contains" && strings.Contains(q, n)) {
-					matches = append(matches, alias.Category)
-				}
-			}
-			value = map[string]any{"query": a.Query, "matches": matches}
 		} else {
 			jobs := []map[string]any{}
 			for _, ref := range v.Constraints.JobRefs {

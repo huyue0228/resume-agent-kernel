@@ -18,23 +18,23 @@ import (
 	"resume-agent-kernel/internal/tools"
 )
 
-func (s *Service) ExecuteAnalysis(ctx context.Context, a p.AnalysisRequestV3, key string) (p.AnalysisResponseV3, error) {
+func (s *Service) ExecuteAnalysis(ctx context.Context, a p.AnalysisRequestV4, key string) (p.AnalysisResponseV4, error) {
 	e, err := a.TaskInput()
 	if err != nil {
-		return p.AnalysisResponseV3{}, err
+		return p.AnalysisResponseV4{}, err
 	}
 	r, err := s.Execute(ctx, e, key)
 	if err != nil {
-		return p.AnalysisResponseV3{}, err
+		return p.AnalysisResponseV4{}, err
 	}
-	result := p.AnalysisResponseV3{ProtocolVersion: r.ProtocolVersion, TaskID: r.TaskID, IdempotencyKey: r.IdempotencyKey,
+	result := p.AnalysisResponseV4{ProtocolVersion: r.ProtocolVersion, TaskID: r.TaskID, IdempotencyKey: r.IdempotencyKey,
 		Pin: r.Pin, WorkflowRevision: r.WorkflowRevision, Profile: r.Profile, Matches: r.Matches, Manifest: r.Manifest, Trace: r.Trace}
 	raw, err := json.Marshal(result)
 	if err != nil {
 		return result, err
 	}
 	if err = contract.Validate("response", raw); err != nil {
-		return p.AnalysisResponseV3{}, errors.New("analysis response contract invalid")
+		return p.AnalysisResponseV4{}, errors.New("analysis response contract invalid")
 	}
 	return result, nil
 }
@@ -129,7 +129,7 @@ func (s *Service) runTask(ctx context.Context, e p.TaskEnvelopeV1, key, hash str
 		for _, j := range chunk {
 			constraints.JobRefs = append(constraints.JobRefs, j.Ref)
 		}
-		providers := append([]tools.Provider{&agent.Provider{Collector: part, Candidate: e.Snapshot.Candidate, Constraints: constraints, Taxonomy: e.Snapshot.Taxonomy}}, s.externalProviders...)
+		providers := append([]tools.Provider{&agent.Provider{Collector: part, Candidate: e.Snapshot.Candidate, Constraints: constraints}}, s.externalProviders...)
 		registry, registryErr := tools.NewProviders(providers...)
 		if registryErr != nil {
 			return result, registryErr

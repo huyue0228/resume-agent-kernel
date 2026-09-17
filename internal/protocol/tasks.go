@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	TaskProtocolVersion    = "resume-analysis/v3"
+	TaskProtocolVersion    = "resume-analysis/v4"
 	ResumeJobMatchTaskKind = "candidate.application_assessment"
 	TaskResultVersion      = "resume-application-assessment/v1"
 )
@@ -61,17 +61,10 @@ type WorkflowSnapshotV1 struct {
 
 type CaseSnapshotV1 struct {
 	TagCatalog []AbilityTagV1        `json:"tag_catalog,omitempty"`
-	Taxonomy   []MajorAliasV1        `json:"taxonomy,omitempty"`
 	Candidate  CandidateSnapshotV1   `json:"candidate"`
 	Workflow   WorkflowSnapshotV1    `json:"workflow"`
 	Volunteers []VolunteerSnapshotV1 `json:"volunteers"`
 	Jobs       []JobSnapshotV1       `json:"jobs"`
-}
-
-type MajorAliasV1 struct {
-	Name      string `json:"name"`
-	Category  string `json:"category"`
-	MatchType string `json:"match_type"`
 }
 
 type TaskEnvelopeV1 struct {

@@ -116,23 +116,6 @@
     "read_only": true
   },
   {
-    "name": "taxonomy.lookup_major",
-    "description": "查询本地专业分类信息",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "query": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "query"
-      ],
-      "additionalProperties": false
-    },
-    "read_only": true
-  },
-  {
     "name": "evidence.verify_quotes",
     "description": "验证原文、页码与行定位",
     "input_schema": {

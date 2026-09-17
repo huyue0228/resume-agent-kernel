@@ -111,7 +111,7 @@ func TestTaskHTTPModelUsesCollectorsAndReturnsNoBusinessAction(t *testing.T) {
 	}
 	// 真正经过公开 HTTP 边界，验证共享 Schema 与运行时返回的匹配结果。
 	requestData, _ := contract.Bundle.ReadFile("bundle/request.example.json")
-	var request p.AnalysisRequestV3
+	var request p.AnalysisRequestV4
 	json.Unmarshal(requestData, &request)
 	request.Model = e.Model
 	request.Pin = e.Pin

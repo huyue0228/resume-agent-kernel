@@ -1,6 +1,6 @@
 # Resume Agent Kernel
 
-独立 Go 简历分析引擎，负责完整文本阅读与搜索、证据化画像、合规岗位池内的匹配、工具/MCP 与预算控制。志愿排序、学校/学历准入、HC 和业务动作属于业务平台。
+独立 Go 简历分析引擎，负责完整文本阅读与搜索、证据化画像、唯一当前投递标准的评估、工具/MCP 与预算控制。志愿排序、学校/学历准入、HC 和业务动作属于业务平台。
 
 ## 独立构建
 
@@ -20,7 +20,7 @@ AGENT_KERNEL_TOKEN='<random-service-token>' \
 AGENT_KERNEL_ADDRESS='127.0.0.1:8090' dist/agent-kernel
 ```
 
-健康检查 `GET /healthz` 不承担版本校验；认证的 `GET /v2/capabilities` 返回实际 build、工具注册表指纹及嵌入指令指纹。公开候选人分析入口 `POST /v2/tasks/execute`，协议为 `resume-analysis/v3`，携带 `X-Agent-Kernel-Token`。模型密钥只通过请求头 `X-Model-API-Key` 传入，不进入协议正文或日志。
+健康检查 `GET /healthz` 不承担版本校验；认证的 `GET /v2/capabilities` 返回实际 build、工具注册表指纹及嵌入指令指纹。公开候选人分析入口 `POST /v2/tasks/execute`，协议为 `resume-analysis/v4`，携带 `X-Agent-Kernel-Token`。模型密钥只通过请求头 `X-Model-API-Key` 传入，不进入协议正文或日志。
 
 请求/结果 Schema 与合成样例在 `internal/contract/bundle/`，由 resume-contracts 仓发布工具生成并固定版本。服务同时校验请求与结果 Schema，测试验证 Go 序列化兼容性；不通过相对路径引用协议仓。
 
@@ -43,8 +43,8 @@ Kernel 默认校验模型 HTTPS 连接，使用容器内的系统信任库。宿
 
 ```sh
 make check
-make package KERNEL_VERSION=v2.0.0
-make image KERNEL_VERSION=v2.0.0 IMAGE=gitlab.internal:5000/resume/kernel:v2.0.0
+make package KERNEL_VERSION=v4.0.0
+make image KERNEL_VERSION=v4.0.0 IMAGE=gitlab.internal:5000/resume/kernel:v4.0.0
 # 显式发布时才添加 PUSH=--push，认证由 CI/部署环境提供
 ```
 
@@ -58,9 +58,9 @@ GitLab 检查与 GitHub 工作流调用同一 Makefile，不依赖外部 CI 的�
 
 代码回退依赖 Git 提交及版本标签，不创建源码副本；GitHub Release 上传并回下载校验后清理本地临时分发物。
 
-公开 v3 任务为 `candidate.application_assessment`，结果结构为 `resume-application-assessment/v1`。`scope.jobs` 固定为一个当前投递标准；`scope.tag_catalog` 定义可提取的能力标签，`profile.tags` 返回标签编码、原文证据、置信度及已支持/待核实状态。未知标签和无效证据被拒绝；置信度低于 0.8 降为待核实。部门岗位池、入池资格、人工复核、HC 和分配均由平台负责。部署时需升级配套的 v3 平台，保留既有 HTTP 路径和完整文本输入。
+公开 v4 任务为 `candidate.application_assessment`，结果结构为 `resume-application-assessment/v1`。`scope.jobs` 固定为一个当前投递标准；`scope.tag_catalog` 定义可提取的能力标签，`profile.tags` 返回标签编码、原文证据、置信度及已支持/待核实状态。未知标签和无效证据被拒绝；置信度低于 0.8 降为待核实。专业大类词表和 `taxonomy.lookup_major` 已移除。部门岗位池、入池资格、HC 计划数和业务归属均由平台负责。部署时需升级配套的 v4 平台，保留既有 HTTP 路径和完整文本输入。
 
-分配 Agent 与筛选共用部署，提供 `GET /v2/allocation/capabilities` 和 `POST /v2/allocation/tasks/execute`（同样使用 `X-Agent-Kernel-Token`）。协议包 3.1.0 保留筛选 v3，新增 `resume-allocation/v1` / `resume-allocation-plan/v1`。
+分配 Agent 与筛选共用部署，提供 `GET /v2/allocation/capabilities` 和 `POST /v2/allocation/tasks/execute`（同样使用 `X-Agent-Kernel-Token`）。协议包 4.0.0 使用筛选 v4，并保留 `resume-allocation/v1` / `resume-allocation-plan/v1`。
 
 `internal/allocation` 的确定性执行器仅处理白名单资格、标签、允许需求、7 天供给和版本引用，按“优先标签命中数降序、priority 升序、供给升序、最后序号升序、需求 ID 升序”输出方案。`counted_demand_ids` 标识当前候选人在窗口内已计入供给的需求，防止批内重复累计。每成员恰好一个 assign/wait；平台需独立复算、校验版本并提交。
 
