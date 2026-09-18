@@ -32,7 +32,7 @@ func TestTaskFailuresKeepSafeSpecificCodes(t *testing.T) {
 	}{
 		{name: "invalid_json", content: "not json", code: "model_output_invalid"},
 		{name: "missing_done", content: `{"kind":"final"}`, code: "model_output_invalid"},
-		{name: "turn_budget", content: `{"kind":"tool_calls","tool_calls":[{"id":"","name":"resume.list_sections","arguments":{}}]}`, code: "budget_exhausted"},
+		{name: "turn_budget", content: `{"kind":"tool_calls","tool_calls":[{"id":"","name":"resume.list_sections","arguments":{}}]}`, code: "turn_budget_exhausted"},
 		{name: "incomplete", content: `{"kind":"tool_calls","tool_calls":[{"name":"task_done","arguments":{"status":"FAILED"}}]}`, code: "materials_incomplete"},
 		{name: "connection", status: 401, code: "model_connection_error"},
 		{name: "rate_limit", status: 429, code: "model_rate_limited"},
@@ -111,7 +111,7 @@ func TestTaskHTTPModelUsesCollectorsAndReturnsNoBusinessAction(t *testing.T) {
 	}
 	// 真正经过公开 HTTP 边界，验证共享 Schema 与运行时返回的匹配结果。
 	requestData, _ := contract.Bundle.ReadFile("bundle/request.example.json")
-	var request p.AnalysisRequestV4
+	var request p.AnalysisRequestV5
 	json.Unmarshal(requestData, &request)
 	request.Model = e.Model
 	request.Pin = e.Pin

@@ -22,8 +22,13 @@ type Message struct {
 }
 
 type Usage struct {
-	InputTokens  int
-	OutputTokens int
+	InputTokens           int
+	OutputTokens          int
+	InputReported         bool
+	OutputReported        bool
+	Attempts              int
+	UnknownInputAttempts  int
+	UnknownOutputAttempts int
 }
 
 type Client interface {
@@ -61,26 +66,41 @@ func NewHTTPClient(config protocol.ModelConfig, apiKey string) (*HTTPClient, err
 }
 
 func (c *HTTPClient) Complete(ctx context.Context, messages []Message) (string, Usage, error) {
-	attempts := c.config.RetryCount + 1
+	attempts := c.MaxAttempts()
+	total := Usage{}
 	var lastErr error
 	for attempt := 0; attempt < attempts; attempt++ {
 		content, usage, retryable, err := c.completeOnce(ctx, messages)
+		total.Attempts++
+		total.InputTokens += usage.InputTokens
+		total.OutputTokens += usage.OutputTokens
+		total.InputReported = total.InputReported || usage.InputReported
+		total.OutputReported = total.OutputReported || usage.OutputReported
+		if !usage.InputReported {
+			total.UnknownInputAttempts++
+		}
+		if !usage.OutputReported {
+			total.UnknownOutputAttempts++
+		}
 		if err == nil {
-			return content, usage, nil
+			return content, total, nil
 		}
 		lastErr = err
 		if !retryable || attempt+1 >= attempts {
-			break
+			return content, total, err
 		}
 		delay := time.Duration(1<<attempt) * 250 * time.Millisecond
 		select {
 		case <-ctx.Done():
-			return "", Usage{}, ctx.Err()
+			return "", total, ctx.Err()
 		case <-time.After(delay):
 		}
 	}
-	return "", Usage{}, lastErr
+	return "", total, lastErr
 }
+
+func (c *HTTPClient) MaxAttempts() int  { return max(1, min(6, c.config.RetryCount+1)) }
+func (c *HTTPClient) ModelName() string { return c.config.ModelName }
 
 func (c *HTTPClient) completeOnce(ctx context.Context, messages []Message) (string, Usage, bool, error) {
 	endpoint := strings.TrimRight(c.config.BaseURL, "/")
@@ -157,14 +177,18 @@ func parseChat(data []byte) (string, Usage, error) {
 			} `json:"message"`
 		} `json:"choices"`
 		Usage struct {
-			PromptTokens     int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
+			PromptTokens     *int `json:"prompt_tokens"`
+			CompletionTokens *int `json:"completion_tokens"`
 		} `json:"usage"`
 	}
-	if err := json.Unmarshal(data, &response); err != nil || len(response.Choices) == 0 || strings.TrimSpace(response.Choices[0].Message.Content) == "" {
+	if err := json.Unmarshal(data, &response); err != nil {
 		return "", Usage{}, ErrInvalidResponse
 	}
-	return response.Choices[0].Message.Content, Usage{InputTokens: response.Usage.PromptTokens, OutputTokens: response.Usage.CompletionTokens}, nil
+	usage := reportedUsage(response.Usage.PromptTokens, response.Usage.CompletionTokens)
+	if len(response.Choices) == 0 || strings.TrimSpace(response.Choices[0].Message.Content) == "" {
+		return "", usage, ErrInvalidResponse
+	}
+	return response.Choices[0].Message.Content, usage, nil
 }
 
 func parseResponses(data []byte) (string, Usage, error) {
@@ -177,8 +201,8 @@ func parseResponses(data []byte) (string, Usage, error) {
 			} `json:"content"`
 		} `json:"output"`
 		Usage struct {
-			InputTokens  int `json:"input_tokens"`
-			OutputTokens int `json:"output_tokens"`
+			InputTokens  *int `json:"input_tokens"`
+			OutputTokens *int `json:"output_tokens"`
 		} `json:"usage"`
 	}
 	if err := json.Unmarshal(data, &response); err != nil {
@@ -195,7 +219,20 @@ func parseResponses(data []byte) (string, Usage, error) {
 		}
 	}
 	if strings.TrimSpace(content) == "" {
-		return "", Usage{}, ErrInvalidResponse
+		return "", reportedUsage(response.Usage.InputTokens, response.Usage.OutputTokens), ErrInvalidResponse
 	}
-	return content, Usage{InputTokens: response.Usage.InputTokens, OutputTokens: response.Usage.OutputTokens}, nil
+	return content, reportedUsage(response.Usage.InputTokens, response.Usage.OutputTokens), nil
+}
+
+func reportedUsage(input, output *int) Usage {
+	u := Usage{}
+	if input != nil && *input >= 0 {
+		u.InputTokens = *input
+		u.InputReported = true
+	}
+	if output != nil && *output >= 0 {
+		u.OutputTokens = *output
+		u.OutputReported = true
+	}
+	return u
 }

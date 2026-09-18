@@ -55,104 +55,198 @@ func parseToolResponse(content string) (toolResponse, error) {
 }
 
 func RunCandidate(ctx context.Context, client model.Client, registry *tools.Registry, c *agent.Collector, b p.TaskBudgetV1, trace *p.SafeTrace) error {
-	catalog, _ := json.Marshal(map[string]any{"available_tools": registry.Catalog(), "budget": b, "existing_profile": c.Profile, "profile_already_submitted": c.Profile != nil})
-	messages := []model.Message{{Role: "system", Content: instructions}, {Role: "user", Content: string(catalog)}}
-	repairs := 0
-	repairOutput := func(content string) bool {
-		if repairs >= 2 || trace.Turns >= b.MaxTurns {
-			return false
-		}
-		repairs++
-		if content != "" {
-			messages = append(messages, model.Message{Role: "assistant", Content: content})
-		}
-		messages = append(messages, model.Message{Role: "user", Content: `{"error":"本轮输出格式无效，未执行本轮任何工具。请仅返回 kind 为 tool_calls 的 JSON 对象，tool_calls 为非空数组，每项只包含 id、name、arguments。继续尚未完成的工具调用，不要重复已成功提交的画像或岗位。"}`})
-		return true
+	b = initBudget(b, trace)
+	modelName := ""
+	if named, ok := client.(interface{ ModelName() string }); ok {
+		modelName = named.ModelName()
 	}
+	counter, err := model.NewTokenCounterForModel(modelName)
+	if err != nil {
+		return err
+	}
+	trace.Budget.Tokenizer = counter.Name()
+	history := newConversation()
+	final := false
+	finalAttempted := false
 	allowedNames := map[string]bool{}
 	for _, definition := range registry.Catalog() {
 		allowedNames[definition.Name] = true
+	}
+	attempts := 1
+	if httpClient, ok := client.(*model.HTTPClient); ok {
+		attempts = httpClient.MaxAttempts()
 	}
 	for trace.Turns < b.MaxTurns {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if trace.InputTokens+trace.OutputTokens >= b.MaxTokens {
-			return errors.New("token budget exceeded")
+		remaining := b.MaxTokens - trace.InputTokens - trace.OutputTokens
+		trace.Budget.RemainingTokens = max(0, remaining)
+		if remaining <= 0 {
+			return stop(trace, "token_limit")
 		}
-		estimatedInput := 0
-		for _, m := range messages {
-			estimatedInput += len(m.Content) + 16
+		if trace.ToolCallCount >= b.MaxToolCalls {
+			return stop(trace, "tool_limit")
 		}
-		remaining := b.MaxTokens - trace.InputTokens - trace.OutputTokens - estimatedInput
-		if remaining < 128 {
-			return errors.New("token budget insufficient for next request")
+		if history.noProgress >= 3 {
+			return stop(trace, "no_progress")
 		}
-		if httpClient, ok := client.(*model.HTTPClient); ok {
-			httpClient.OutputBudget = min(remaining, 8192)
+		final = final || b.MaxTurns-trace.Turns <= 2 || b.MaxToolCalls-trace.ToolCallCount <= 3 || history.noProgress >= 2
+		if deadline, ok := ctx.Deadline(); ok && b.MaxDurationSeconds > 0 && time.Until(deadline) < time.Duration(min(15, max(1, b.MaxDurationSeconds/10)))*time.Second {
+			final = true
 		}
-		content, usage, err := client.Complete(ctx, messages)
-		if usage.InputTokens == 0 {
-			usage.InputTokens = estimatedInput
+		messages := history.messages(registry, c, b, trace, final)
+		estimatedInput := counter.Estimate(messages)
+		compacted := false
+		if estimatedInput > b.MaxContextTokens*3/5 || estimatedInput*3 > remaining {
+			compacted = history.compact(2)
+			messages = history.messages(registry, c, b, trace, final)
+			estimatedInput = counter.Estimate(messages)
 		}
-		if usage.OutputTokens == 0 {
-			usage.OutputTokens = len(content)
-		}
-		trace.Turns++
-		trace.InputTokens += usage.InputTokens
-		trace.OutputTokens += usage.OutputTokens
-		if err != nil {
-			if errors.Is(err, model.ErrInvalidResponse) && repairOutput(content) {
-				continue
+		// Reserve a complete final submission and one bounded correction inside
+		// the declared total, including their input replay and transport retries.
+		finalMessages := history.messages(registry, c, b, trace, true)
+		reserve := 2 * (counter.Estimate(finalMessages) + 4096) * attempts
+		if !final && (remaining < reserve+(estimatedInput+1024)*attempts || estimatedInput+2048 > b.MaxContextTokens) {
+			final = true
+			if history.compact(2) {
+				compacted = true
 			}
-			return err
+			messages = history.messages(registry, c, b, trace, true)
+			estimatedInput = counter.Estimate(messages)
 		}
+		if final {
+			reserve = 0
+			// Keep one correction affordable after the first final submission,
+			// when the remaining token and turn budgets can support both calls.
+			if !finalAttempted && b.MaxTurns-trace.Turns >= 2 && remaining >= 2*(estimatedInput+1024)*attempts {
+				reserve = min((estimatedInput+4096)*attempts, remaining-(estimatedInput+1024)*attempts)
+			}
+		}
+		available := min((remaining-reserve)/attempts-estimatedInput, b.MaxContextTokens-estimatedInput)
+		if available < 1024 && history.compact(1) {
+			compacted = true
+			messages = history.messages(registry, c, b, trace, final)
+			estimatedInput = counter.Estimate(messages)
+			available = min((remaining-reserve)/attempts-estimatedInput, b.MaxContextTokens-estimatedInput)
+		}
+		trace.Budget.NextInputTokens = estimatedInput
+		trace.Budget.ReservedTokens = reserve
+		if compacted {
+			trace.Budget.Compactions++
+		}
+		// Once only completion remains, a small output is sufficient. Otherwise
+		// do not knowingly truncate a structured submission to a tiny response.
+		minimumOutput := 1024
+		if c.Profile != nil && len(c.Matches) == len(c.Jobs) {
+			minimumOutput = 128
+		}
+		if available < minimumOutput {
+			if b.MaxContextTokens-estimatedInput < minimumOutput {
+				return stop(trace, "context_limit")
+			}
+			return stop(trace, "next_request")
+		}
+		outputLimit := min(available, 8192)
+		if httpClient, ok := client.(*model.HTTPClient); ok {
+			httpClient.OutputBudget = outputLimit
+		}
+		started := time.Now()
+		content, usage, callErr := client.Complete(ctx, messages)
+		modelDuration := time.Since(started).Milliseconds()
+		finalAttempted = finalAttempted || final
+		input, output, usageSource := recordUsage(counter, messages, content, usage, outputLimit)
+		trace.Turns++
+		trace.InputTokens += input
+		trace.OutputTokens += output
+		trace.Budget.RemainingTokens = max(0, b.MaxTokens-trace.InputTokens-trace.OutputTokens)
+		trace.Budget.TransportRetries += max(0, usage.Attempts-1)
+		trace.Rounds = append(trace.Rounds, p.RoundTrace{Turn: trace.Turns, Phase: phaseName(final), EstimatedInputTokens: estimatedInput, InputTokens: input, OutputTokens: output, OutputLimit: outputLimit, RemainingTokens: trace.Budget.RemainingTokens, ReservedTokens: reserve, ModelDurationMS: modelDuration, UsageSource: usageSource, TransportAttempts: max(1, usage.Attempts), Compacted: compacted})
+		trace.Budget.UsageSource = mergeUsageSource(trace.Rounds)
 		if trace.InputTokens+trace.OutputTokens > b.MaxTokens {
-			return errors.New("token budget exceeded")
+			return stop(trace, "token_limit")
+		}
+		if callErr != nil && !errors.Is(callErr, model.ErrInvalidResponse) {
+			trace.Budget.StopReason = "model_error"
+			return callErr
 		}
 		response, parseErr := parseToolResponse(content)
-		if parseErr != nil {
-			if repairOutput(content) {
-				continue
+		if callErr != nil || parseErr != nil {
+			if trace.Budget.FormatRepairs >= 2 || trace.Turns >= b.MaxTurns {
+				trace.Budget.StopReason = "invalid_output"
+				return ErrInvalidOutput
 			}
-			return ErrInvalidOutput
+			trace.Budget.FormatRepairs++
+			history.noProgress++
+			history.rounds = append(history.rounds, []model.Message{{Role: "user", Content: `{"error":"本轮未执行任何工具。仅返回 kind=tool_calls 的 JSON，tool_calls 为非空数组，每项包含 name、arguments。按 runtime_state 继续，不要重复成功提交。"}`}})
+			continue
 		}
-		// ID 仅关联对话中的调用与结果，由运行时编号，避免模型跨轮重用或漏填。
-		// 同步改写 assistant 历史，保证模型看到的调用和返回仍一一对应。
 		for i := range response.Calls {
 			response.Calls[i].ID = fmt.Sprintf("call_%d_%d", trace.Turns, i+1)
 		}
 		normalized, _ := json.Marshal(response)
-		messages = append(messages, model.Message{Role: "assistant", Content: string(normalized)})
+		round := []model.Message{{Role: "assistant", Content: string(normalized)}}
+		progress := false
 		for _, call := range response.Calls {
 			if c.Done {
+				trace.Budget.StopReason = "invalid_output"
 				return ErrInvalidOutput
 			}
 			if trace.ToolCallCount >= b.MaxToolCalls {
-				return errors.New("tool budget exceeded")
+				return stop(trace, "tool_limit")
 			}
 			trace.ToolCallCount++
-			start := time.Now()
-			raw, count, err := registry.Execute(ctx, call)
-			status := "ok"
-			if err != nil {
+			started := time.Now()
+			before := collectorProgress(c)
+			var raw json.RawMessage
+			var count int
+			var toolErr error
+			if final && !finalTool(call.Name) {
+				toolErr = tools.Invalid("finalize_only", "name", "当前只允许 available_tools 中的收尾工具；提交已取得的证据和分析或以 FAILED 结束。")
+			} else {
+				raw, count, toolErr = registry.Execute(ctx, call)
+			}
+			advanced, repeated := history.observe(call, raw, toolErr, before, c)
+			progress = progress || advanced
+			if repeated {
+				trace.Budget.RepeatedCalls++
+			}
+			status, code, field := "ok", "", ""
+			if toolErr != nil {
+				if errors.Is(toolErr, context.Canceled) || errors.Is(toolErr, context.DeadlineExceeded) {
+					return toolErr
+				}
 				status = "error"
-				raw, _ = json.Marshal(map[string]string{"error": "tool arguments, scope or evidence invalid; inspect schema and correct submission"})
+				feedback := tools.Feedback(toolErr)
+				code, field = feedback.Code, feedback.Field
+				trace.Budget.ValidationFailures++
+				raw, _ = json.Marshal(map[string]any{"error": feedback, "repeat_unchanged": repeated})
 			}
 			traceName := call.Name
 			if !allowedNames[traceName] {
 				traceName = "unregistered_tool"
 			}
-			trace.ToolCalls = append(trace.ToolCalls, p.ToolTrace{Name: traceName, Status: status, DurationMS: time.Since(start).Milliseconds(), ItemCount: count})
-			msg, _ := json.Marshal(map[string]any{"tool_call_id": call.ID, "result": json.RawMessage(raw)})
-			messages = append(messages, model.Message{Role: "user", Content: string(msg)})
+			trace.ToolCalls = append(trace.ToolCalls, p.ToolTrace{Name: traceName, Status: status, DurationMS: time.Since(started).Milliseconds(), ItemCount: count, ErrorCode: code, ErrorField: field, Repeated: repeated})
+			if len(raw) == 0 {
+				raw = json.RawMessage(`null`)
+			}
+			msg, _ := json.Marshal(map[string]any{"tool_call_id": call.ID, "result": raw})
+			round = append(round, model.Message{Role: "user", Content: string(msg)})
+		}
+		history.rounds = append(history.rounds, round)
+		trace.Rounds[len(trace.Rounds)-1].Progress = progress
+		if progress {
+			history.noProgress = 0
+		} else {
+			history.noProgress++
 		}
 		if c.Done {
 			if c.Failed {
+				trace.Budget.StopReason = "materials_incomplete"
 				return ErrIncomplete
 			}
 			return nil
 		}
 	}
-	return errors.New("turn budget exhausted without task_done")
+	return stop(trace, "turn_limit")
 }

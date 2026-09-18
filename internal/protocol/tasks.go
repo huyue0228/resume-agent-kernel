@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	TaskProtocolVersion    = "resume-analysis/v4"
+	TaskProtocolVersion    = "resume-analysis/v5"
 	ResumeJobMatchTaskKind = "candidate.application_assessment"
 	TaskResultVersion      = "resume-application-assessment/v1"
 )
@@ -28,6 +28,7 @@ type TaskBudgetV1 struct {
 	MaxToolCalls       int `json:"max_tool_calls"`
 	MaxDurationSeconds int `json:"max_duration_seconds"`
 	MaxTokens          int `json:"max_tokens"`
+	MaxContextTokens   int `json:"max_context_tokens,omitempty"`
 }
 
 type CandidateSnapshotV1 = AnalysisCandidateV1
@@ -107,6 +108,9 @@ func (e TaskEnvelopeV1) Validate() error {
 	b := e.Budget
 	if b.MaxTurns < 1 || b.MaxTurns > 64 || b.MaxToolCalls < 1 || b.MaxToolCalls > 512 || b.MaxDurationSeconds < 1 || b.MaxDurationSeconds > 1800 || b.MaxTokens < 1 || b.MaxTokens > 1000000 {
 		return errors.New("invalid task budget")
+	}
+	if b.MaxContextTokens != 0 && (b.MaxContextTokens < 1024 || b.MaxContextTokens > 1000000) {
+		return errors.New("invalid context budget")
 	}
 	if e.Snapshot.Candidate.Ref == "" || len(e.Snapshot.Volunteers) == 0 || len(e.Snapshot.Volunteers) > 100 || len(e.Snapshot.Jobs) > 2000 {
 		return errors.New("invalid snapshot scope")

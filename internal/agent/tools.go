@@ -62,7 +62,7 @@ func (v *Provider) Execute(ctx context.Context, call p.ToolCall) (tools.Result, 
 			return tools.Result{}, err
 		}
 		if a.Start < 1 || a.End < a.Start || a.End > len(c.Lines) || a.End-a.Start > 199 {
-			return tools.Result{}, errors.New("invalid line range, maximum 200 lines")
+			return tools.Result{}, tools.Invalid("read_range", "start_line/end_line", "使用目录中的全局行号，每次最多读取 200 行。")
 		}
 		value = c.Lines[a.Start-1 : a.End]
 	case "resume.search_evidence", "job.search_requirements":
@@ -112,7 +112,7 @@ func (v *Provider) Execute(ctx context.Context, call p.ToolCall) (tools.Result, 
 		}
 		j, ok := c.Jobs[a.Ref]
 		if !ok {
-			return tools.Result{}, errors.New("job outside compliant pool")
+			return tools.Result{}, tools.Invalid("job_scope", "job_ref", "只允许读取当前输入中固定的岗位引用。")
 		}
 		value = jobRequirement(j)
 	case "evidence.verify_quotes":
@@ -122,7 +122,10 @@ func (v *Provider) Execute(ctx context.Context, call p.ToolCall) (tools.Result, 
 		if err := Decode(call.Arguments, &a); err != nil {
 			return tools.Result{}, err
 		}
-		value = map[string]bool{"verified": c.verifyAll(a.Evidence)}
+		if err := c.validateEvidence(a.Evidence, "evidence"); err != nil {
+			return tools.Result{}, err
+		}
+		value = map[string]bool{"verified": true}
 	case "candidate_profile.submit":
 		var profile p.CandidateProfileV1
 		if err := Decode(call.Arguments, &profile); err != nil {

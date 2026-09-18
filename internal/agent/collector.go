@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"sort"
@@ -12,6 +13,7 @@ import (
 	"unicode"
 
 	p "resume-agent-kernel/internal/protocol"
+	"resume-agent-kernel/internal/tools"
 )
 
 type Line struct {
@@ -20,6 +22,7 @@ type Line struct {
 	Text   string `json:"text"`
 }
 type Collector struct {
+	Candidate  p.CandidateSnapshotV1
 	TagCatalog []p.AbilityTagV1
 	Profile    *p.CandidateProfileV1
 	Matches    map[string]p.JobMatchV1
@@ -92,21 +95,48 @@ func (c *Collector) verifyAll(e []p.EvidenceV1) bool {
 	}
 	return true
 }
+func (c *Collector) validateEvidence(e []p.EvidenceV1, field string) error {
+	if len(e) == 0 {
+		return tools.Invalid("evidence_required", field, "至少提供一条原文证据。")
+	}
+	for i, v := range e {
+		at := fmt.Sprintf("%s[%d]", field, i)
+		if len([]rune(norm(v.Quote))) < 8 {
+			return tools.Invalid("evidence_too_short", at+".quote", "去除空白后至少 8 个字符，必须来自原文。")
+		}
+		if v.StartLine < 1 || v.EndLine < v.StartLine || v.EndLine > len(c.Lines) || v.EndLine-v.StartLine > 100 {
+			return tools.Invalid("evidence_range", at, "起止行须位于目录的全局行范围内，跨度不得超过 101 行。")
+		}
+		for _, line := range c.Lines[v.StartLine-1 : v.EndLine] {
+			if line.Page != v.Page {
+				return tools.Invalid("evidence_page", at+".page", "页码与全局行号不一致；读取对应行后修正。")
+			}
+		}
+		if !c.Verify(v) {
+			return tools.Invalid("evidence_mismatch", at+".quote", "引用与指定页行的原文不匹配；读取该行区间并原样引用，不要改写证据。")
+		}
+	}
+	return nil
+}
 func (c *Collector) SubmitProfile(profile p.CandidateProfileV1) error {
 	if c.Done || c.Profile != nil {
-		return errors.New("profile already submitted")
+		return tools.Invalid("profile_already_submitted", "claims", "画像已通过校验；继续尚未提交的岗位分析或 task_done。")
 	}
 	if len(profile.Claims) == 0 || len(profile.Claims) > 100 {
-		return errors.New("profile claims required")
+		return tools.Invalid("claims_required", "claims", "画像须包含 1 至 100 项有证据的描述。")
 	}
-	for _, claim := range profile.Claims {
+	for i, claim := range profile.Claims {
+		field := fmt.Sprintf("claims[%d]", i)
 		switch claim.Kind {
 		case "education", "project", "internship", "skill", "certificate", "major_direction", "agent_experience", "risk":
 		default:
-			return errors.New("invalid profile claim kind")
+			return tools.Invalid("claim_kind", field+".kind", "使用 Schema 中允许的画像类型。")
 		}
-		if strings.TrimSpace(claim.Summary) == "" || !c.verifyAll(claim.Evidence) {
-			return errors.New("profile evidence invalid")
+		if strings.TrimSpace(claim.Summary) == "" {
+			return tools.Invalid("summary_required", field+".summary", "填写该项画像的简明描述。")
+		}
+		if err := c.validateEvidence(claim.Evidence, field+".evidence"); err != nil {
+			return err
 		}
 	}
 	seenTags := map[string]bool{}
@@ -117,8 +147,18 @@ func (c *Collector) SubmitProfile(profile p.CandidateProfileV1) error {
 				known = true
 			}
 		}
-		if !known || seenTags[tag.Code] || math.IsNaN(tag.Confidence) || tag.Confidence < 0 || tag.Confidence > 1 || (tag.Status != "supported" && tag.Status != "needs_verification") || !c.verifyAll(tag.Evidence) {
-			return errors.New("tag code, confidence or evidence invalid")
+		field := fmt.Sprintf("tags[%d]", i)
+		if !known || seenTags[tag.Code] {
+			return tools.Invalid("tag_code", field+".code", "使用 tag_catalog 中的 code，同一标签只提交一次。")
+		}
+		if math.IsNaN(tag.Confidence) || tag.Confidence < 0 || tag.Confidence > 1 {
+			return tools.Invalid("confidence_range", field+".confidence", "置信度须为 0 到 1。")
+		}
+		if tag.Status != "supported" && tag.Status != "needs_verification" {
+			return tools.Invalid("tag_status", field+".status", "状态须为 supported 或 needs_verification。")
+		}
+		if err := c.validateEvidence(tag.Evidence, field+".evidence"); err != nil {
+			return err
 		}
 		seenTags[tag.Code] = true
 		if tag.Confidence < .8 {
@@ -143,19 +183,29 @@ func (c *Collector) SubmitProfile(profile p.CandidateProfileV1) error {
 }
 func (c *Collector) SubmitMatches(matches []p.JobMatchV1) error {
 	if c.Done || c.Profile == nil || len(matches) == 0 {
-		return errors.New("invalid match submission")
+		return tools.Invalid("profile_required", "matches", "须先成功提交画像，再提交当前岗位分析。")
 	}
 	seen := map[string]bool{}
-	for _, m := range matches {
+	for i, m := range matches {
+		field := fmt.Sprintf("matches[%d]", i)
 		if _, ok := c.Jobs[m.JobRef]; !ok {
-			return errors.New("job reference outside compliant pool")
+			return tools.Invalid("job_scope", field+".job_ref", "只允许当前输入中固定的岗位引用。")
 		}
 		if _, ok := c.Matches[m.JobRef]; ok || seen[m.JobRef] {
-			return errors.New("duplicate job submission")
+			return tools.Invalid("match_already_submitted", field+".job_ref", "岗位已提交，不要重复提交；完成后调用 task_done。")
 		}
 		seen[m.JobRef] = true
-		if m.Dimensions.Validate() != nil || math.IsNaN(m.Confidence) || m.Confidence < 0 || m.Confidence > 1 || strings.TrimSpace(m.Reason) == "" || !c.verifyAll(m.Evidence) {
-			return errors.New("match dimensions or evidence invalid")
+		if m.Dimensions.Validate() != nil {
+			return tools.Invalid("dimensions_range", field+".dimensions", "所有评分维度须为 0 到 1 的有限数值。")
+		}
+		if math.IsNaN(m.Confidence) || m.Confidence < 0 || m.Confidence > 1 {
+			return tools.Invalid("confidence_range", field+".confidence", "置信度须为 0 到 1。")
+		}
+		if strings.TrimSpace(m.Reason) == "" {
+			return tools.Invalid("reason_required", field+".reason", "填写与当前岗位相关的分析理由。")
+		}
+		if err := c.validateEvidence(m.Evidence, field+".evidence"); err != nil {
+			return err
 		}
 	}
 	for _, m := range matches {
@@ -182,7 +232,7 @@ func (c *Collector) Finish(status string) error {
 		return nil
 	}
 	if status != "DONE" || c.Profile == nil || len(c.Matches) != len(c.Jobs) {
-		return errors.New("profile and complete job coverage required")
+		return tools.Invalid("completion_incomplete", "status", "画像和当前岗位分析都须提交并通过校验；否则修正缺失项或以 FAILED 结束。")
 	}
 	c.Done = true
 	return nil

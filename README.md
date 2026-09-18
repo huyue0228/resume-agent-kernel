@@ -20,7 +20,7 @@ AGENT_KERNEL_TOKEN='<random-service-token>' \
 AGENT_KERNEL_ADDRESS='127.0.0.1:8090' dist/agent-kernel
 ```
 
-健康检查 `GET /healthz` 不承担版本校验；认证的 `GET /v2/capabilities` 返回实际 build、工具注册表指纹及嵌入指令指纹。公开候选人分析入口 `POST /v2/tasks/execute`，协议为 `resume-analysis/v4`，携带 `X-Agent-Kernel-Token`。模型密钥只通过请求头 `X-Model-API-Key` 传入，不进入协议正文或日志。
+健康检查 `GET /healthz` 不承担版本校验；认证的 `GET /v2/capabilities` 返回实际 build、工具注册表指纹及嵌入指令指纹。公开候选人分析入口 `POST /v2/tasks/execute`，协议为 `resume-analysis/v5`，携带 `X-Agent-Kernel-Token`。模型密钥只通过请求头 `X-Model-API-Key` 传入，不进入协议正文或日志。
 
 请求/结果 Schema 与合成样例在 `internal/contract/bundle/`，由 resume-contracts 仓发布工具生成并固定版本。服务同时校验请求与结果 Schema，测试验证 Go 序列化兼容性；不通过相对路径引用协议仓。
 
@@ -43,8 +43,8 @@ Kernel 默认校验模型 HTTPS 连接，使用容器内的系统信任库。宿
 
 ```sh
 make check
-make package KERNEL_VERSION=v4.0.0
-make image KERNEL_VERSION=v4.0.0 IMAGE=gitlab.internal:5000/resume/kernel:v4.0.0
+make package KERNEL_VERSION=v5.0.0
+make image KERNEL_VERSION=v5.0.0 IMAGE=gitlab.internal:5000/resume/kernel:v5.0.0
 # 显式发布时才添加 PUSH=--push，认证由 CI/部署环境提供
 ```
 
@@ -58,9 +58,19 @@ GitLab 检查与 GitHub 工作流调用同一 Makefile，不依赖外部 CI 的�
 
 代码回退依赖 Git 提交及版本标签，不创建源码副本；GitHub Release 上传并回下载校验后清理本地临时分发物。
 
-公开 v4 任务为 `candidate.application_assessment`，结果结构为 `resume-application-assessment/v1`。`scope.jobs` 固定为一个当前投递标准；`scope.tag_catalog` 定义可提取的能力标签，`profile.tags` 返回标签编码、原文证据、置信度及已支持/待核实状态。未知标签和无效证据被拒绝；置信度低于 0.8 降为待核实。专业大类词表和 `taxonomy.lookup_major` 已移除。部门岗位池、入池资格、HC 计划数和业务归属均由平台负责。部署时需升级配套的 v4 平台，保留既有 HTTP 路径和完整文本输入。
+公开 v5 任务为 `candidate.application_assessment`，结果结构为 `resume-application-assessment/v1`。`scope.jobs` 固定为一个当前投递标准；`scope.tag_catalog` 定义可提取的能力标签，`profile.tags` 返回标签编码、原文证据、置信度及已支持/待核实状态。未知标签和无效证据被拒绝；置信度低于 0.8 降为待核实。专业大类词表和 `taxonomy.lookup_major` 已移除。部门岗位池、入池资格、HC 计划数和业务归属均由平台负责。部署时需升级配套的 v5 平台，保留既有 HTTP 路径和完整文本输入。
 
-分配 Agent 与筛选共用部署，提供 `GET /v2/allocation/capabilities` 和 `POST /v2/allocation/tasks/execute`（同样使用 `X-Agent-Kernel-Token`）。协议包 4.0.0 使用筛选 v4，并保留 `resume-allocation/v1` / `resume-allocation-plan/v1`。
+分配 Agent 与筛选共用部署，提供 `GET /v2/allocation/capabilities` 和 `POST /v2/allocation/tasks/execute`（同样使用 `X-Agent-Kernel-Token`）。协议包 5.0.0 使用筛选 v5，并保留 `resume-allocation/v1` / `resume-allocation-plan/v1`。
+
+## 分析预算与收敛
+
+v5 新增独立的 `budget.max_context_tokens`（默认 32768）和结构化预算、逐轮诊断；累计预算仍为每任务输入加输出之和。Platform、Kernel 和 Contracts 5.0.0 必须配套升级，旧 v4 请求会被明确拒绝；评估结果及独立分配协议未改变。
+
+Kernel 内置离线 tokenizer，模型返回 usage 时按实际值记账并校准后续估算；缺失 usage 或运输重试的未知消耗标为估算。每轮记录输入、输出、模型耗时、重试数、预留额度和进展，不记录提示词、简历正文或密钥。
+
+运行时直接准备当前岗位、标签字典和页行目录；以 Collector 中已验证的画像和岗位结果重建进度。历史过长或剩余额度不足时，只移除完整旧轮次，保留近期交互和已验证状态；全文及全局行号始终保留，允许重新读取。
+
+收尾阶段占用原有轮数、工具、时间和 token 预算，限制新的探索，仅允许必要证据修正、提交和结束。连续三个无进展轮次终止；输出格式修正最多两次，与工具校验失败、运输重试分开统计。`safe_trace.budget.stop_reason` 区分累计 token、下一轮额度、上下文、轮次、工具数和无进展，失败结果不能作为达标结论。
 
 `internal/allocation` 的确定性执行器仅处理白名单资格、标签、允许需求、7 天供给和版本引用，按“优先标签命中数降序、priority 升序、供给升序、最后序号升序、需求 ID 升序”输出方案。`counted_demand_ids` 标识当前候选人在窗口内已计入供给的需求，防止批内重复累计。每成员恰好一个 assign/wait；平台需独立复算、校验版本并提交。
 

@@ -8,7 +8,8 @@
       "required": [],
       "additionalProperties": false
     },
-    "read_only": true
+    "read_only": true,
+    "version": "resume-tools/5.0.0"
   },
   {
     "name": "candidate.read_context",
@@ -19,7 +20,8 @@
       "required": [],
       "additionalProperties": false
     },
-    "read_only": true
+    "read_only": true,
+    "version": "resume-tools/5.0.0"
   },
   {
     "name": "resume.list_sections",
@@ -30,7 +32,8 @@
       "required": [],
       "additionalProperties": false
     },
-    "read_only": true
+    "read_only": true,
+    "version": "resume-tools/5.0.0"
   },
   {
     "name": "resume.read_sections",
@@ -51,7 +54,8 @@
       ],
       "additionalProperties": false
     },
-    "read_only": true
+    "read_only": true,
+    "version": "resume-tools/5.0.0"
   },
   {
     "name": "resume.search_evidence",
@@ -68,7 +72,8 @@
       ],
       "additionalProperties": false
     },
-    "read_only": true
+    "read_only": true,
+    "version": "resume-tools/5.0.0"
   },
   {
     "name": "jobs.list_candidates",
@@ -79,7 +84,8 @@
       "required": [],
       "additionalProperties": false
     },
-    "read_only": true
+    "read_only": true,
+    "version": "resume-tools/5.0.0"
   },
   {
     "name": "job.read_requirement",
@@ -96,7 +102,8 @@
       ],
       "additionalProperties": false
     },
-    "read_only": true
+    "read_only": true,
+    "version": "resume-tools/5.0.0"
   },
   {
     "name": "job.search_requirements",
@@ -113,7 +120,8 @@
       ],
       "additionalProperties": false
     },
-    "read_only": true
+    "read_only": true,
+    "version": "resume-tools/5.0.0"
   },
   {
     "name": "evidence.verify_quotes",
@@ -154,7 +162,8 @@
       ],
       "additionalProperties": false
     },
-    "read_only": true
+    "read_only": true,
+    "version": "resume-tools/5.0.0"
   },
   {
     "name": "candidate_profile.submit",
@@ -325,7 +334,8 @@
       ],
       "additionalProperties": false
     },
-    "read_only": true
+    "read_only": true,
+    "version": "resume-tools/5.0.0"
   },
   {
     "name": "job_match.submit",
@@ -438,7 +448,8 @@
       ],
       "additionalProperties": false
     },
-    "read_only": true
+    "read_only": true,
+    "version": "resume-tools/5.0.0"
   },
   {
     "name": "task_done",
@@ -459,6 +470,7 @@
       ],
       "additionalProperties": false
     },
-    "read_only": true
+    "read_only": true,
+    "version": "resume-tools/5.0.0"
   }
 ]

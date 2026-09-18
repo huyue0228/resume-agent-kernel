@@ -133,13 +133,17 @@ func (r *Registry) Fingerprint() (string, error) {
 func (r *Registry) Execute(ctx context.Context, call protocol.ToolCall) (json.RawMessage, int, error) {
 	provider, ok := r.providers[call.Name]
 	if !ok || r.definitions[call.Name].Visibility == "internal" || !r.frozen {
-		return nil, 0, fmt.Errorf("tool %q is not allowlisted", call.Name)
+		return nil, 0, Invalid("tool_unavailable", "name", "请选择 available_tools 中的工具。")
 	}
 	if call.Arguments == nil {
 		call.Arguments = map[string]any{}
 	}
 	if err := r.schemas[call.Name].Validate(call.Arguments); err != nil {
-		return nil, 0, fmt.Errorf("tool arguments do not match schema")
+		feedback := schemaFeedback(r.definitions[call.Name].InputSchema, call.Arguments)
+		if feedback == nil {
+			feedback = Invalid("schema_invalid", "arguments", "参数不符合工具 Schema；请修正字段类型和取值范围。")
+		}
+		return nil, 0, feedback
 	}
 	result, err := provider.Execute(ctx, call)
 	return result.Payload, result.ItemCount, err

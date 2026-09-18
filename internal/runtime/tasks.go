@@ -18,23 +18,23 @@ import (
 	"resume-agent-kernel/internal/tools"
 )
 
-func (s *Service) ExecuteAnalysis(ctx context.Context, a p.AnalysisRequestV4, key string) (p.AnalysisResponseV4, error) {
+func (s *Service) ExecuteAnalysis(ctx context.Context, a p.AnalysisRequestV5, key string) (p.AnalysisResponseV5, error) {
 	e, err := a.TaskInput()
 	if err != nil {
-		return p.AnalysisResponseV4{}, err
+		return p.AnalysisResponseV5{}, err
 	}
 	r, err := s.Execute(ctx, e, key)
 	if err != nil {
-		return p.AnalysisResponseV4{}, err
+		return p.AnalysisResponseV5{}, err
 	}
-	result := p.AnalysisResponseV4{ProtocolVersion: r.ProtocolVersion, TaskID: r.TaskID, IdempotencyKey: r.IdempotencyKey,
+	result := p.AnalysisResponseV5{ProtocolVersion: r.ProtocolVersion, TaskID: r.TaskID, IdempotencyKey: r.IdempotencyKey,
 		Pin: r.Pin, WorkflowRevision: r.WorkflowRevision, Profile: r.Profile, Matches: r.Matches, Manifest: r.Manifest, Trace: r.Trace}
 	raw, err := json.Marshal(result)
 	if err != nil {
 		return result, err
 	}
 	if err = contract.Validate("response", raw); err != nil {
-		return p.AnalysisResponseV4{}, errors.New("analysis response contract invalid")
+		return p.AnalysisResponseV5{}, errors.New("analysis response contract invalid")
 	}
 	return result, nil
 }
@@ -64,13 +64,22 @@ func (s *Service) runTask(ctx context.Context, e p.TaskEnvelopeV1, key, hash str
 		result.Trace.FinishedAt = time.Now().UTC()
 		result.Trace.Status = result.Manifest.TerminalState
 		if err != nil {
+			var stopped *llmloop.StopError
 			if result.Manifest.FailureCode == "" {
 				result.Manifest.FailureCode = "analysis_failed"
 			}
 			if errors.Is(err, context.DeadlineExceeded) {
 				result.Manifest.FailureCode = "task_timeout"
+				if result.Trace.Budget != nil {
+					result.Trace.Budget.StopReason = "timeout"
+				}
 			} else if errors.Is(err, context.Canceled) {
 				result.Manifest.FailureCode = "task_cancelled"
+				if result.Trace.Budget != nil {
+					result.Trace.Budget.StopReason = "cancelled"
+				}
+			} else if errors.As(err, &stopped) {
+				result.Manifest.FailureCode = map[string]string{"token_limit": "token_budget_exhausted", "next_request": "next_request_budget_insufficient", "context_limit": "context_limit_exceeded", "turn_limit": "turn_budget_exhausted", "tool_limit": "tool_budget_exhausted", "no_progress": "analysis_stalled"}[stopped.Reason]
 			} else if strings.Contains(err.Error(), "budget") {
 				result.Manifest.FailureCode = "budget_exhausted"
 			} else if errors.Is(err, model.ErrRateLimited) {
@@ -122,6 +131,7 @@ func (s *Service) runTask(ctx context.Context, e p.TaskEnvelopeV1, key, hash str
 	for offset := 0; offset < len(jobs); offset += 24 {
 		chunk := jobs[offset:min(offset+24, len(jobs))]
 		part := agent.NewCollector(document.Text, chunk)
+		part.Candidate = e.Snapshot.Candidate
 		part.TagCatalog = e.Snapshot.TagCatalog
 		part.Profile = collector.Profile
 		constraints := result.Deterministic

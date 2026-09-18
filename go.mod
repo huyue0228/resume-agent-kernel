@@ -2,7 +2,15 @@ module resume-agent-kernel
 
 go 1.25.0
 
-require github.com/modelcontextprotocol/go-sdk v1.7.0
+require (
+	github.com/modelcontextprotocol/go-sdk v1.7.0
+	github.com/pkoukk/tiktoken-go v0.1.8
+)
+
+require (
+	github.com/dlclark/regexp2 v1.10.0 // indirect
+	github.com/google/uuid v1.3.0 // indirect
+)
 
 require (
 	github.com/google/jsonschema-go v0.4.3

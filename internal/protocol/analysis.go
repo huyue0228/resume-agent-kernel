@@ -17,8 +17,8 @@ type KernelCapabilitiesV1 struct {
 
 var ErrVersionUnavailable = errors.New("kernel_version_unavailable")
 
-// AnalysisRequestV4 是唯一公开的候选人级输入；不接受准入规则、历史志愿或 HC。
-type AnalysisRequestV4 struct {
+// AnalysisRequestV5 是唯一公开的候选人级输入；不接受准入规则、历史志愿或 HC。
+type AnalysisRequestV5 struct {
 	ProtocolVersion  string          `json:"protocol_version"`
 	TaskKind         string          `json:"task_kind"`
 	TaskID           string          `json:"task_id"`
@@ -26,12 +26,12 @@ type AnalysisRequestV4 struct {
 	Trigger          string          `json:"trigger"`
 	WorkflowRevision int64           `json:"workflow_revision"`
 	Pin              TaskPinV1       `json:"pin"`
-	Scope            AnalysisScopeV4 `json:"scope"`
+	Scope            AnalysisScopeV5 `json:"scope"`
 	Model            ModelConfig     `json:"model"`
 	Budget           TaskBudgetV1    `json:"budget"`
 }
 
-type AnalysisScopeV4 struct {
+type AnalysisScopeV5 struct {
 	Candidate    AnalysisCandidateV1 `json:"candidate"`
 	VolunteerRef string              `json:"volunteer_ref"`
 	ResumeText   ResumeTextV2        `json:"resume_text"`
@@ -59,7 +59,7 @@ type AnalysisJobV1 struct {
 	DepartmentName   string   `json:"department_name"`
 }
 
-func (a AnalysisRequestV4) TaskInput() (TaskEnvelopeV1, error) {
+func (a AnalysisRequestV5) TaskInput() (TaskEnvelopeV1, error) {
 	if a.WorkflowRevision < 0 || a.Scope.VolunteerRef == "" || len(a.Scope.Jobs) != 1 {
 		return TaskEnvelopeV1{}, errors.New("invalid admitted scope")
 	}
@@ -76,7 +76,7 @@ func (a AnalysisRequestV4) TaskInput() (TaskEnvelopeV1, error) {
 	return e, e.Validate()
 }
 
-type AnalysisResponseV4 struct {
+type AnalysisResponseV5 struct {
 	ProtocolVersion  string              `json:"protocol_version"`
 	TaskID           string              `json:"task_id"`
 	IdempotencyKey   string              `json:"idempotency_key"`
